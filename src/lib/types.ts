@@ -16,8 +16,8 @@ export interface ImmichAsset {
   exifInfo?: {
     city?: string;
     country?: string;
-    imageWidth?: number;
-    imageHeight?: number;
+    exifImageWidth?: number;
+    exifImageHeight?: number;
     [key: string]: any;
   }
 }
@@ -35,5 +35,3 @@ export interface ImmichAlbum {
   assets: ImmichAsset[];
   startDate: string;
 }
-
-    

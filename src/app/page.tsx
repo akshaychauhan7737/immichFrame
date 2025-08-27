@@ -14,7 +14,7 @@ import { format } from 'date-fns';
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
 const RETRY_DELAY = 5000; // 5 seconds
-const IMAGE_ORIENTATION = process.env.NEXT_PUBLIC_IMAGE_ORIENTATION || 'landscape'; // 'portrait', 'landscape', or ''
+const IMAGE_ORIENTATION = process.env.NEXT_PUBLIC_IMAGE_ORIENTATION || 'landscape'; // 'portrait', 'landscape', or 'all'
 
 // We use a local proxy to avoid CORS issues.
 const PROXY_URL = '/api/immich';
@@ -206,8 +206,8 @@ export default function Home() {
 
           if (IMAGE_ORIENTATION === 'portrait' || IMAGE_ORIENTATION === 'landscape') {
             fetchedAssets = fetchedAssets.filter(asset => {
-              const height = asset.exifInfo?.imageHeight ?? 0;
-              const width = asset.exifInfo?.imageWidth ?? 0;
+              const height = asset.exifInfo?.exifImageHeight ?? 0;
+              const width = asset.exifInfo?.exifImageWidth ?? 0;
               if (height === 0 || width === 0) return false;
               return IMAGE_ORIENTATION === 'portrait' ? height > width : width > height;
             });
@@ -451,5 +451,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
