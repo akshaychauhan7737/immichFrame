@@ -50,6 +50,7 @@ export default function Home() {
   const getImageUrl = useCallback(async (assetId: string): Promise<string | null> => {
     if (areConfigsMissing) return null;
     try {
+      // Corrected endpoint for fetching the file
       const res = await fetch(`${PROXY_URL}/asset/file/${assetId}`, {
         headers: { 'x-api-key': API_KEY as string },
       });
@@ -81,7 +82,8 @@ export default function Home() {
 
     const fetchAssets = async () => {
       try {
-        const response = await fetch(`${PROXY_URL}/asset?isFavorite=${IS_FAVORITE_ONLY}`, {
+        // Corrected endpoint for fetching assets list
+        const response = await fetch(`${PROXY_URL}/assets?isFavorite=${IS_FAVORITE_ONLY}`, {
           headers: { 'x-api-key': API_KEY as string, 'Accept': 'application/json' },
         });
         if (!response.ok) throw new Error(`Failed to fetch assets: ${response.statusText}`);
