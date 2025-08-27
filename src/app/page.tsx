@@ -191,7 +191,7 @@ export default function Home() {
   // Clock
   useEffect(() => {
     const clockInterval = setInterval(() => {
-      setCurrentTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      setCurrentTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }));
     }, 1000);
     return () => clearInterval(clockInterval);
   }, []);
@@ -274,11 +274,13 @@ export default function Home() {
         )}
       </div>
 
-      <div className="pointer-events-none absolute inset-0 flex flex-col justify-between p-4 md:p-6">
-        <div className="self-start rounded-lg bg-black/30 px-4 py-2 text-4xl font-semibold text-white backdrop-blur-sm md:text-6xl">
-          {currentTime}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col p-4 md:p-6">
+        <div className="flex w-full items-end justify-between">
+            <div className="rounded-lg bg-black/30 px-4 py-2 text-4xl font-semibold text-white backdrop-blur-sm md:text-6xl">
+              {currentTime}
+            </div>
         </div>
-        <div className="w-full">
+        <div className="w-full pt-4">
           <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white/80" />
         </div>
       </div>
