@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
+const RETRY_DELAY = 5000; // 5 seconds
 // We use a local proxy to avoid CORS issues.
 const PROXY_URL = '/api/immich';
 const SERVER_URL_CONFIGURED = !!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
@@ -28,6 +29,9 @@ function shuffleArray<T>(array: T[]): T[] {
   }
   return shuffled;
 }
+
+const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
 
 export default function Home() {
   const { toast } = useToast();
@@ -62,7 +66,7 @@ export default function Home() {
       const blob = await res.blob();
       return URL.createObjectURL(blob);
     } catch (e: any)      {
-        console.error(e);
+        console.error(`Error fetching image ${assetId}:`, e);
         toast({
             variant: "destructive",
             title: "Image Fetch Error",
@@ -71,6 +75,51 @@ export default function Home() {
         return null;
     }
   }, [areConfigsMissing, toast]);
+  
+  const getImageWithRetry = useCallback(async (assetId: string, retries = 1): Promise<string | null> => {
+      let url = await getImageUrl(assetId);
+      if (url) {
+          return url;
+      }
+      
+      if (retries > 0) {
+          toast({
+              title: "Retrying Image Load",
+              description: `Will retry loading image in ${RETRY_DELAY / 1000} seconds.`,
+          });
+          await delay(RETRY_DELAY);
+          return await getImageWithRetry(assetId, retries - 1);
+      }
+      
+      toast({
+          variant: "destructive",
+          title: "Image Load Failed",
+          description: `Skipping image ${assetId} after multiple attempts.`,
+      });
+      return null;
+
+  }, [getImageUrl, toast]);
+
+
+  const loadNextImage = useCallback(async (nextIndex: number) => {
+    if (assets.length === 0) return;
+    
+    const nextAsset = assets[nextIndex];
+    const newUrl = await getImageWithRetry(nextAsset.id);
+
+    if (newUrl) {
+      if (isAVisible) {
+        setImageB({ url: newUrl, id: nextAsset.id });
+      } else {
+        setImageA({ url: newUrl, id: nextAsset.id });
+      }
+    } else {
+      // If we failed to get the image, skip to the next one immediately
+      const nextNextIndex = (nextIndex + 1) % assets.length;
+      setCurrentIndex(nextNextIndex);
+    }
+  }, [assets, getImageWithRetry, isAVisible]);
+
 
   // --- Effects ---
 
@@ -139,11 +188,14 @@ export default function Home() {
         const shuffledAssets = shuffleArray(fetchedAssets);
         setAssets(shuffledAssets);
 
-        const firstAssetUrl = await getImageUrl(shuffledAssets[0].id);
+        const firstAssetUrl = await getImageWithRetry(shuffledAssets[0].id);
         if (firstAssetUrl) {
           setImageA({ url: firstAssetUrl, id: shuffledAssets[0].id });
         } else {
            setError(`Could not load the first image from album "${albumWithAssets.albumName}".`);
+           // Try next one if first fails
+           const nextIndex = (0 + 1) % shuffledAssets.length;
+           setCurrentIndex(nextIndex);
         }
         setIsLoading(false);
 
@@ -154,7 +206,7 @@ export default function Home() {
       }
     };
     fetchInitialData();
-  }, [areConfigsMissing, getImageUrl]);
+  }, [areConfigsMissing, getImageWithRetry]);
 
   // Image rotation timer
   useEffect(() => {
@@ -162,22 +214,13 @@ export default function Home() {
     
     const timer = setTimeout(async () => {
         const nextAssetIndex = (currentIndex + 1) % assets.length;
-        const nextAsset = assets[nextAssetIndex];
-        const newUrl = await getImageUrl(nextAsset.id);
+        await loadNextImage(nextAssetIndex);
+        setCurrentIndex(nextAssetIndex);
 
-        if (newUrl) {
-            // Preload the next image into the non-visible container
-            if (isAVisible) {
-                setImageB({ url: newUrl, id: nextAsset.id });
-            } else {
-                setImageA({ url: newUrl, id: nextAsset.id });
-            }
-            setCurrentIndex(nextAssetIndex);
-        }
     }, DURATION);
 
     return () => clearTimeout(timer);
-  }, [currentIndex, assets, getImageUrl, isLoading, isAVisible]);
+  }, [currentIndex, assets, isLoading, loadNextImage]);
   
   // When next image is loaded, trigger the visibility switch
   useEffect(() => {
@@ -347,5 +390,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
