@@ -88,13 +88,13 @@ export default function Home() {
             isArchived: 'false',
         });
         // Corrected endpoint for fetching assets list
-        const response = await fetch(`${PROXY_URL}/asset?${params.toString()}`, {
+        const response = await fetch(`${PROXY_URL}/assets?${params.toString()}`, {
           headers: { 'x-api-key': API_KEY as string, 'Accept': 'application/json' },
         });
 
         if (!response.ok) {
           if (response.status === 404) {
-            throw new Error("Failed to fetch assets: Not Found. Please check your Immich server URL and API endpoint (/api/asset).");
+            throw new Error("Failed to fetch assets: Not Found. Please check your Immich server URL and API endpoint (/api/assets).");
           }
           throw new Error(`Failed to fetch assets: ${response.statusText}`);
         }
