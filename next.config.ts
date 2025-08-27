@@ -29,11 +29,16 @@ const nextConfig: NextConfig = {
     if (!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL) {
       return [];
     }
-    const immichUrl = new URL(process.env.NEXT_PUBLIC_IMMICH_SERVER_URL);
+    // The destination needs to be the root of the Immich API endpoint.
+    // The `:path*` from the source will be appended to this.
+    // For example, a request to `/api/immich/asset/file/123` will be proxied to
+    // `http://<your-immich-url>/api/asset/file/123`.
+    const destination = `${process.env.NEXT_PUBLIC_IMMICH_SERVER_URL}/api/:path*`;
+
     return [
       {
         source: '/api/immich/:path*',
-        destination: `${immichUrl.protocol}//${immichUrl.host}/api/:path*`,
+        destination: destination,
       },
     ];
   },
