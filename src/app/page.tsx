@@ -52,6 +52,7 @@ export default function Home() {
     try {
       // Corrected endpoint for fetching the file
       const res = await fetch(`${PROXY_URL}/asset/file/${assetId}`, {
+        method: 'POST', // Use POST for file download as per Immich docs for API key auth in headers
         headers: { 'x-api-key': API_KEY as string },
       });
       if (!res.ok) {
@@ -93,7 +94,7 @@ export default function Home() {
 
         if (!response.ok) {
           if (response.status === 404) {
-            throw new Error("Failed to fetch assets: Not Found. Please check your Immich server URL and API endpoint.");
+            throw new Error("Failed to fetch assets: Not Found. Please check your Immich server URL and API endpoint (/api/asset).");
           }
           throw new Error(`Failed to fetch assets: ${response.statusText}`);
         }
