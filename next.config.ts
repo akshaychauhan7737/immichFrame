@@ -32,7 +32,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/immich/:path*',
-        destination: `${immichUrl.origin}/:path*`,
+        destination: `${immichUrl.origin}/api/:path*`,
       },
     ];
   },
