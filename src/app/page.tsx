@@ -275,8 +275,8 @@ export default function Home() {
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col p-4 md:p-6">
-        <div className="flex w-full items-end justify-between">
-            <div className="rounded-lg bg-black/30 px-4 py-2 text-4xl font-semibold text-white backdrop-blur-sm md:text-6xl">
+        <div className="flex w-full items-end">
+            <div className="rounded-lg bg-black/30 px-4 py-2 text-4xl font-semibold text-white backdrop-blur-md md:text-6xl">
               {currentTime}
             </div>
         </div>
