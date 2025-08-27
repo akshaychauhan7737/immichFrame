@@ -166,6 +166,7 @@ export default function Home() {
         const newUrl = await getImageUrl(nextAsset.id);
 
         if (newUrl) {
+            // Preload the next image into the non-visible container
             if (isAVisible) {
                 setImageB({ url: newUrl, id: nextAsset.id });
             } else {
@@ -180,23 +181,31 @@ export default function Home() {
   
   // When next image is loaded, trigger the visibility switch
   useEffect(() => {
+    // Only run this effect when the next image has loaded
     if (!nextImageLoaded) return;
     
+    // Determine which URL belongs to the image that is now hidden and needs to be cleaned up.
+    // If A is now visible, B was the old one. If A is not visible, it was the old one.
     const oldUrlToRevoke = isAVisible ? imageB.url : imageA.url;
     
+    // Flip visibility
     setIsAVisible(prev => !prev);
+    // Reset the loaded flag
     setNextImageLoaded(false);
 
-    // Cleanup the old image's object URL after the transition has started
+    // After the transition starts, clean up the old image's Object URL
+    // to prevent memory leaks.
     if(oldUrlToRevoke) {
+        // Wait for the fade-out to complete before revoking the URL
         setTimeout(() => {
             URL.revokeObjectURL(oldUrlToRevoke);
-             if (isAVisible) { // After flipping, A will be visible, so B was the old one
+            // Also clear the state to prevent re-rendering of the old image
+             if (isAVisible) { 
                 setImageB({url: '', id: 'clearedB'});
             } else {
                 setImageA({url: '', id: 'clearedA'});
             }
-        }, 1000); // Wait for fade out to complete
+        }, 1000); // This should match the transition duration
     }
 
   }, [nextImageLoaded, isAVisible, imageA.url, imageB.url]);
@@ -210,7 +219,7 @@ export default function Home() {
       setProgress(p => Math.min(p + (100 / (DURATION / 100)), 100));
     }, 100);
     return () => clearInterval(interval);
-  }, [currentIndex, isLoading, error]);
+  }, [currentIndex, isLoading, error, isAVisible]); // Add isAVisible to restart on change
 
   // Clock
   useEffect(() => {
@@ -283,6 +292,7 @@ export default function Home() {
               fill
               className="object-contain"
               onLoad={() => {
+                 // If A is not supposed to be visible, it means it's the next image loading in the background.
                  if (!isAVisible) setNextImageLoaded(true);
               }}
               priority
@@ -314,6 +324,7 @@ export default function Home() {
               fill
               className="object-contain"
               onLoad={() => {
+                // If A is visible, it means B is the next image loading in the background.
                 if (isAVisible) setNextImageLoaded(true);
               }}
               priority
