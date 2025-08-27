@@ -242,43 +242,74 @@ export default function Home() {
   }
 
   return (
-    <main className="relative h-screen w-screen overflow-hidden bg-background">
-      <div className="absolute inset-0">
+    <main className="relative h-screen w-screen overflow-hidden bg-black">
+      {/* Image A Container */}
+      <div className={cn('absolute inset-0 transition-opacity duration-1000 ease-in-out', isAVisible ? 'opacity-100' : 'opacity-0')}>
         {imageA.url && (
-          <Image
-            key={imageA.id}
-            src={imageA.url}
-            alt="Immich Photo"
-            fill
-            className={cn('object-contain transition-opacity duration-1000 ease-in-out', isAVisible ? 'opacity-100' : 'opacity-0')}
-            onLoad={() => {
-              if (!isAVisible) setIsAVisible(true);
-            }}
-            priority
-            unoptimized
-          />
+          <>
+            {/* Background Image A */}
+            <Image
+              key={`${imageA.id}-bg`}
+              src={imageA.url}
+              alt=""
+              aria-hidden="true"
+              fill
+              className="object-cover blur-2xl scale-110"
+              unoptimized
+            />
+            {/* Foreground Image A */}
+            <Image
+              key={imageA.id}
+              src={imageA.url}
+              alt="Immich Photo"
+              fill
+              className="object-contain"
+              onLoad={() => {
+                if (!isAVisible) setIsAVisible(true);
+              }}
+              priority
+              unoptimized
+            />
+          </>
         )}
+      </div>
+
+      {/* Image B Container */}
+      <div className={cn('absolute inset-0 transition-opacity duration-1000 ease-in-out', !isAVisible ? 'opacity-100' : 'opacity-0')}>
         {imageB.url && (
-          <Image
-            key={imageB.id}
-            src={imageB.url}
-            alt="Immich Photo"
-            fill
-            className={cn('object-contain transition-opacity duration-1000 ease-in-out', !isAVisible ? 'opacity-100' : 'opacity-0')}
-            onLoad={() => {
-              if (isAVisible) setIsAVisible(false);
-            }}
-            priority
-            unoptimized
-          />
+          <>
+            {/* Background Image B */}
+            <Image
+              key={`${imageB.id}-bg`}
+              src={imageB.url}
+              alt=""
+              aria-hidden="true"
+              fill
+              className="object-cover blur-2xl scale-110"
+              unoptimized
+            />
+            {/* Foreground Image B */}
+            <Image
+              key={imageB.id}
+              src={imageB.url}
+              alt="Immich Photo"
+              fill
+              className="object-contain"
+              onLoad={() => {
+                if (isAVisible) setIsAVisible(false);
+              }}
+              priority
+              unoptimized
+            />
+          </>
         )}
       </div>
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col p-4 md:p-6">
         <div className="flex w-full items-end">
-            <div className="rounded-lg bg-black/30 px-4 py-2 text-4xl font-semibold text-white backdrop-blur-md md:text-6xl">
-              {currentTime}
-            </div>
+          <div className="rounded-lg bg-black/30 px-4 py-2 text-4xl font-semibold text-white backdrop-blur-md md:text-6xl">
+            {currentTime}
+          </div>
         </div>
         <div className="w-full pt-4">
           <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white/80" />
