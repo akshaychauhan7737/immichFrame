@@ -14,7 +14,7 @@ import { format } from 'date-fns';
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
 const RETRY_DELAY = 5000; // 5 seconds
-const IMAGE_ORIENTATION = process.env.NEXT_PUBLIC_IMAGE_ORIENTATION || 'landscape'; // 'portrait', 'landscape', or 'all'
+const DISPLAY_MODE = process.env.NEXT_PUBLIC_DISPLAY_MODE || 'landscape'; // 'portrait', 'landscape', or 'all'
 
 // We use a local proxy to avoid CORS issues.
 const PROXY_URL = '/api/immich';
@@ -204,12 +204,12 @@ export default function Home() {
             fetchedAssets = fetchedAssets.filter(asset => asset.isFavorite);
           }
 
-          if (IMAGE_ORIENTATION === 'portrait' || IMAGE_ORIENTATION === 'landscape') {
+          if (DISPLAY_MODE === 'portrait' || DISPLAY_MODE === 'landscape') {
             fetchedAssets = fetchedAssets.filter(asset => {
               const height = asset.exifInfo?.exifImageHeight ?? 0;
               const width = asset.exifInfo?.exifImageWidth ?? 0;
               if (height === 0 || width === 0) return false;
-              return IMAGE_ORIENTATION === 'portrait' ? height > width : width > height;
+              return DISPLAY_MODE === 'portrait' ? height > width : width > height;
             });
           }
 
@@ -233,7 +233,7 @@ export default function Home() {
             albumIndex.current = (albumIndex.current + 1) % albumPlaylist.current.length;
             // If we've looped through all albums and found nothing
             if (albumIndex.current === initialAlbumIndex) {
-              setError(`No photos matching the '${IMAGE_ORIENTATION}' orientation filter could be found in any of your ${albumPlaylist.current.length} albums.`);
+              setError(`No photos matching the '${DISPLAY_MODE}' orientation filter could be found in any of your ${albumPlaylist.current.length} albums.`);
               setIsLoading(false);
               return;
             }
