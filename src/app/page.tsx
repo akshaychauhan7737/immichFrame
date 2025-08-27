@@ -14,6 +14,8 @@ import { format } from 'date-fns';
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
 const RETRY_DELAY = 5000; // 5 seconds
+const IMAGE_ORIENTATION = process.env.NEXT_PUBLIC_IMAGE_ORIENTATION || 'landscape'; // 'portrait', 'landscape', or ''
+
 // We use a local proxy to avoid CORS issues.
 const PROXY_URL = '/api/immich';
 const SERVER_URL_CONFIGURED = !!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
@@ -186,23 +188,29 @@ export default function Home() {
           fetchedAssets = fetchedAssets.filter(asset => asset.isFavorite);
         }
         
-        // 5. Filter for portrait images
-        let portraitAssets = fetchedAssets.filter(asset => 
-            asset.exifInfo && 
-            (asset.exifInfo.imageHeight ?? 0) > (asset.exifInfo.imageWidth ?? 0)
-        );
+        // 5. Filter for orientation if required
+        if (IMAGE_ORIENTATION === 'portrait' || IMAGE_ORIENTATION === 'landscape') {
+            const originalCount = fetchedAssets.length;
+            fetchedAssets = fetchedAssets.filter(asset => {
+                const height = asset.exifInfo?.imageHeight ?? 0;
+                const width = asset.exifInfo?.imageWidth ?? 0;
+                if (height === 0 || width === 0) return false; // Exclude if dimensions are unknown
+                
+                return IMAGE_ORIENTATION === 'portrait' ? height > width : width > height;
+            });
 
-        if (portraitAssets.length === 0) {
-            setError(`No portrait photos found in the selected album "${albumWithAssets.albumName}".`);
-            setIsLoading(false);
-            return;
+            if (fetchedAssets.length === 0) {
+                 setError(`No ${IMAGE_ORIENTATION} photos found in the album "${albumWithAssets.albumName}" (checked ${originalCount} photos).`);
+                 setIsLoading(false);
+                 return;
+            }
         }
         
         setCurrentAlbum(albumWithAssets);
 
 
         // 6. Shuffle and set assets, then load the first image
-        const shuffledAssets = shuffleArray(portraitAssets);
+        const shuffledAssets = shuffleArray(fetchedAssets);
         setAssets(shuffledAssets);
 
         const firstAssetUrl = await getImageWithRetry(shuffledAssets[0].id);
@@ -231,9 +239,9 @@ export default function Home() {
     
     const timer = setTimeout(() => {
         const nextAssetIndex = (currentIndex + 1) % assets.length;
-        setCurrentIndex(nextAssetIndex);
         // Don't await here, let it run in the background
         loadNextImage(nextAssetIndex);
+        setCurrentIndex(nextAssetIndex);
     }, DURATION);
 
     return () => clearTimeout(timer);
@@ -419,5 +427,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
