@@ -416,40 +416,42 @@ export default function Home() {
         )}
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-start p-4 md:p-6 text-white">
-        <div className="w-full space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-md">
-            {/* Info Section */}
-            <div className="flex flex-col text-lg md:text-xl font-medium">
-                {currentAlbum && (
-                    <div className="flex items-center gap-2">
-                        <Folder size={20} className="shrink-0" />
-                        <span>{currentAlbum.albumName}</span>
-                    </div>
-                )}
-                {currentAsset && isDateValid && (
-                     <div className="flex items-center gap-2">
-                        <Calendar size={20} className="shrink-0" />
-                        <span>{format(createdAtDate, 'MMMM d, yyyy')}</span>
-                    </div>
-                )}
-                {location && (
-                    <div className="flex items-center gap-2">
-                        <MapPin size={20} className="shrink-0" />
-                        <span>{location}</span>
-                    </div>
-                )}
-            </div>
-
-            {/* Clock and Progress */}
-            <div className="flex w-full items-end gap-4 pt-2">
-              <div className="text-4xl font-semibold md:text-6xl">
-                {currentTime}
-              </div>
-            </div>
-            <div className="w-full pt-2">
-              <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white/80" />
-            </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-4 md:p-6 text-white">
+        {/* Left Box: Time and Progress */}
+        <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-md">
+          <div className="text-4xl font-semibold md:text-6xl">
+            {currentTime}
+          </div>
+          <div className="w-full pt-2">
+            <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white/80" />
+          </div>
         </div>
+
+        {/* Right Box: Photo Details */}
+        {(currentAlbum || (currentAsset && isDateValid) || location) && (
+          <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-md text-right">
+              <div className="flex flex-col items-end text-lg md:text-xl font-medium">
+                  {currentAlbum && (
+                      <div className="flex items-center gap-2">
+                          <span>{currentAlbum.albumName}</span>
+                          <Folder size={20} className="shrink-0" />
+                      </div>
+                  )}
+                  {currentAsset && isDateValid && (
+                       <div className="flex items-center gap-2">
+                           <span>{format(createdAtDate, 'MMMM d, yyyy')}</span>
+                          <Calendar size={20} className="shrink-0" />
+                      </div>
+                  )}
+                  {location && (
+                      <div className="flex items-center gap-2">
+                          <span>{location}</span>
+                          <MapPin size={20} className="shrink-0" />
+                      </div>
+                  )}
+              </div>
+          </div>
+        )}
       </div>
     </main>
   );
