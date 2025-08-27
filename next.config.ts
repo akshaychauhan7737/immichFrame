@@ -29,7 +29,6 @@ const nextConfig: NextConfig = {
     if (!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL) {
       return [];
     }
-    // The destination server must be the root of the Immich instance.
     const immichUrl = new URL(process.env.NEXT_PUBLIC_IMMICH_SERVER_URL);
     return [
       {
