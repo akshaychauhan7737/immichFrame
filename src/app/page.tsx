@@ -438,7 +438,7 @@ export default function Home() {
                           <Folder size={20} className="shrink-0" />
                       </div>
                   )}
-                  {currentAsset && isDateValid && photoDate && (
+                  {isDateValid && photoDate && (
                        <div className="flex items-center gap-2">
                            <span>{format(photoDate, 'MMMM d, yyyy')}</span>
                           <Calendar size={20} className="shrink-0" />
