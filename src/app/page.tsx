@@ -81,7 +81,7 @@ export default function Home() {
 
     const fetchAssets = async () => {
       try {
-        const response = await fetch(`${PROXY_URL}/assets?isFavorite=${IS_FAVORITE_ONLY}`, {
+        const response = await fetch(`${PROXY_URL}/asset?isFavorite=${IS_FAVORITE_ONLY}`, {
           headers: { 'x-api-key': API_KEY as string, 'Accept': 'application/json' },
         });
         if (!response.ok) throw new Error(`Failed to fetch assets: ${response.statusText}`);
