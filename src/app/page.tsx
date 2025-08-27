@@ -43,6 +43,8 @@ export default function Home() {
   const [imageA, setImageA] = useState<{ url: string, id: string }>({ url: '', id: 'initialA' });
   const [imageB, setImageB] = useState<{ url: string, id: string }>({ url: '', id: 'initialB' });
   const [isAVisible, setIsAVisible] = useState(true);
+  const [nextImageLoaded, setNextImageLoaded] = useState(false);
+
 
   const areConfigsMissing = useMemo(() => !SERVER_URL_CONFIGURED || !API_KEY, []);
 
@@ -157,24 +159,48 @@ export default function Home() {
   // Image rotation timer
   useEffect(() => {
     if (assets.length === 0 || isLoading) return;
-
+    
     const timer = setTimeout(async () => {
-      const nextAssetIndex = (currentIndex + 1) % assets.length;
-      const nextAsset = assets[nextAssetIndex];
-      const newUrl = await getImageUrl(nextAsset.id);
+        const nextAssetIndex = (currentIndex + 1) % assets.length;
+        const nextAsset = assets[nextAssetIndex];
+        const newUrl = await getImageUrl(nextAsset.id);
 
-      if (newUrl) {
-        if (isAVisible) {
-          setImageB({ url: newUrl, id: nextAsset.id });
-        } else {
-          setImageA({ url: newUrl, id: nextAsset.id });
+        if (newUrl) {
+            if (isAVisible) {
+                setImageB({ url: newUrl, id: nextAsset.id });
+            } else {
+                setImageA({ url: newUrl, id: nextAsset.id });
+            }
+            setCurrentIndex(nextAssetIndex);
         }
-        setCurrentIndex(nextAssetIndex);
-      }
     }, DURATION);
 
     return () => clearTimeout(timer);
-  }, [isAVisible, currentIndex, assets, getImageUrl, isLoading]);
+  }, [currentIndex, assets, getImageUrl, isLoading, isAVisible]);
+  
+  // When next image is loaded, trigger the visibility switch
+  useEffect(() => {
+    if (!nextImageLoaded) return;
+    
+    const oldUrlToRevoke = isAVisible ? imageB.url : imageA.url;
+    
+    setIsAVisible(prev => !prev);
+    setNextImageLoaded(false);
+
+    // Cleanup the old image's object URL after the transition has started
+    if(oldUrlToRevoke) {
+        setTimeout(() => {
+            URL.revokeObjectURL(oldUrlToRevoke);
+             if (isAVisible) { // After flipping, A will be visible, so B was the old one
+                setImageB({url: '', id: 'clearedB'});
+            } else {
+                setImageA({url: '', id: 'clearedA'});
+            }
+        }, 1000); // Wait for fade out to complete
+    }
+
+  }, [nextImageLoaded, isAVisible, imageA.url, imageB.url]);
+
 
   // Progress bar animation
   useEffect(() => {
@@ -184,7 +210,7 @@ export default function Home() {
       setProgress(p => Math.min(p + (100 / (DURATION / 100)), 100));
     }, 100);
     return () => clearInterval(interval);
-  }, [isAVisible, currentIndex, isLoading, error]);
+  }, [currentIndex, isLoading, error]);
 
   // Clock
   useEffect(() => {
@@ -196,14 +222,6 @@ export default function Home() {
     return () => clearInterval(clockInterval);
   }, []);
   
-  // Cleanup object URLs on unmount
-  useEffect(() => {
-    return () => {
-      if (imageA.url) URL.revokeObjectURL(imageA.url);
-      if (imageB.url) URL.revokeObjectURL(imageB.url);
-    };
-  }, [imageA.url, imageB.url]);
-
   // --- Render Logic ---
 
   if (isLoading) {
@@ -265,10 +283,7 @@ export default function Home() {
               fill
               className="object-contain"
               onLoad={() => {
-                if (imageB.url && isAVisible) {
-                    URL.revokeObjectURL(imageB.url);
-                    setImageB({url: '', id: 'clearedB'});
-                }
+                 if (!isAVisible) setNextImageLoaded(true);
               }}
               priority
               unoptimized
@@ -299,11 +314,7 @@ export default function Home() {
               fill
               className="object-contain"
               onLoad={() => {
-                setIsAVisible(false);
-                if (imageA.url && !isAVisible) {
-                    URL.revokeObjectURL(imageA.url);
-                    setImageA({url: '', id: 'clearedA'});
-                }
+                if (isAVisible) setNextImageLoaded(true);
               }}
               priority
               unoptimized
@@ -325,3 +336,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
