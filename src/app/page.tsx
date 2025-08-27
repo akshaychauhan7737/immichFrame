@@ -165,10 +165,8 @@ export default function Home() {
 
       if (newUrl) {
         if (isAVisible) {
-          URL.revokeObjectURL(imageB.url);
           setImageB({ url: newUrl, id: nextAsset.id });
         } else {
-          URL.revokeObjectURL(imageA.url);
           setImageA({ url: newUrl, id: nextAsset.id });
         }
         setCurrentIndex(nextAssetIndex);
@@ -176,7 +174,7 @@ export default function Home() {
     }, DURATION);
 
     return () => clearTimeout(timer);
-  }, [isAVisible, currentIndex, assets, getImageUrl, isLoading, imageA, imageB]);
+  }, [isAVisible, currentIndex, assets, getImageUrl, isLoading]);
 
   // Progress bar animation
   useEffect(() => {
@@ -190,9 +188,11 @@ export default function Home() {
 
   // Clock
   useEffect(() => {
-    const clockInterval = setInterval(() => {
-      setCurrentTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }));
-    }, 1000);
+    const updateClock = () => {
+        setCurrentTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }));
+    };
+    updateClock();
+    const clockInterval = setInterval(updateClock, 1000);
     return () => clearInterval(clockInterval);
   }, []);
   
@@ -202,7 +202,7 @@ export default function Home() {
       if (imageA.url) URL.revokeObjectURL(imageA.url);
       if (imageB.url) URL.revokeObjectURL(imageB.url);
     };
-  }, [imageA, imageB]);
+  }, [imageA.url, imageB.url]);
 
   // --- Render Logic ---
 
@@ -265,7 +265,10 @@ export default function Home() {
               fill
               className="object-contain"
               onLoad={() => {
-                if (!isAVisible) setIsAVisible(true);
+                if (imageB.url && isAVisible) {
+                    URL.revokeObjectURL(imageB.url);
+                    setImageB({url: '', id: 'clearedB'});
+                }
               }}
               priority
               unoptimized
@@ -296,7 +299,11 @@ export default function Home() {
               fill
               className="object-contain"
               onLoad={() => {
-                if (isAVisible) setIsAVisible(false);
+                setIsAVisible(false);
+                if (imageA.url && !isAVisible) {
+                    URL.revokeObjectURL(imageA.url);
+                    setImageA({url: '', id: 'clearedA'});
+                }
               }}
               priority
               unoptimized
@@ -305,7 +312,7 @@ export default function Home() {
         )}
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col p-4 md:p-6">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-start p-4 md:p-6">
         <div className="flex w-full items-end">
           <div className="rounded-lg bg-black/30 px-4 py-2 text-4xl font-semibold text-white backdrop-blur-md md:text-6xl">
             {currentTime}
