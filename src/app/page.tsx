@@ -352,6 +352,9 @@ export default function Home() {
   }
 
   const location = [currentAsset?.exifInfo?.city, currentAsset?.exifInfo?.country].filter(Boolean).join(', ');
+  const createdAtDate = currentAsset?.createdAt ? new Date(currentAsset.createdAt) : null;
+  const isDateValid = createdAtDate && !isNaN(createdAtDate.getTime());
+
 
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-black">
@@ -423,10 +426,10 @@ export default function Home() {
                         <span>{currentAlbum.albumName}</span>
                     </div>
                 )}
-                {currentAsset && (
+                {currentAsset && isDateValid && (
                      <div className="flex items-center gap-2">
                         <Calendar size={20} className="shrink-0" />
-                        <span>{format(new Date(currentAsset.createdAt), 'MMMM d, yyyy')}</span>
+                        <span>{format(createdAtDate, 'MMMM d, yyyy')}</span>
                     </div>
                 )}
                 {location && (
