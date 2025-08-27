@@ -2,7 +2,7 @@
 "use client";
 
 import type { ImmichAlbum, ImmichAsset } from '@/lib/types';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -40,9 +40,10 @@ export default function Home() {
   const { toast } = useToast();
   
   // --- State Management ---
-  const [assets, setAssets] = useState<ImmichAsset[]>([]);
+  const [currentAssets, setCurrentAssets] = useState<ImmichAsset[]>([]);
   const [currentAlbum, setCurrentAlbum] = useState<ImmichAlbum | null>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [assetIndex, setAssetIndex] = useState(0);
+
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState('');
@@ -53,10 +54,13 @@ export default function Home() {
   const [isAVisible, setIsAVisible] = useState(true);
   const [nextImageLoaded, setNextImageLoaded] = useState(false);
 
+  // Refs to hold the full list of albums and our position in it
+  const albumPlaylist = useRef<ImmichAlbum[]>([]);
+  const albumIndex = useRef(0);
 
   const areConfigsMissing = useMemo(() => !SERVER_URL_CONFIGURED || !API_KEY, []);
   
-  const currentAsset = useMemo(() => assets[currentIndex], [assets, currentIndex]);
+  const currentAsset = useMemo(() => currentAssets[assetIndex], [currentAssets, assetIndex]);
 
   // --- Image Fetching Logic ---
   const getImageUrl = useCallback(async (assetId: string): Promise<string | null> => {
@@ -107,10 +111,25 @@ export default function Home() {
   }, [getImageUrl, toast]);
 
 
-  const loadNextImage = useCallback(async (nextIndex: number) => {
-    if (assets.length === 0) return;
+  const loadNextAsset = useCallback(async () => {
+    let nextAssetIndex = (assetIndex + 1);
+    let nextAlbumIndex = albumIndex.current;
     
-    const nextAsset = assets[nextIndex];
+    // If we've reached the end of the current album's assets
+    if (nextAssetIndex >= currentAssets.length) {
+      nextAssetIndex = 0;
+      nextAlbumIndex = (albumIndex.current + 1);
+      if (nextAlbumIndex >= albumPlaylist.current.length) {
+          nextAlbumIndex = 0; // Loop back to the start of the playlist
+      }
+      // This will trigger the useEffect to load a new album
+      albumIndex.current = nextAlbumIndex; 
+      // Setting current assets to empty will show loader and trigger album load effect
+      setCurrentAssets([]); 
+      return;
+    }
+
+    const nextAsset = currentAssets[nextAssetIndex];
     if (!nextAsset) return;
 
     const newUrl = await getImageWithRetry(nextAsset.id);
@@ -121,17 +140,17 @@ export default function Home() {
       } else {
         setImageA({ url: newUrl, id: nextAsset.id });
       }
+      setAssetIndex(nextAssetIndex);
     } else {
       // If we failed to get the image, skip to the next one immediately
-      const nextNextIndex = (nextIndex + 1) % assets.length;
-      setCurrentIndex(nextNextIndex);
+      setAssetIndex(i => (i + 1)); // This will trigger loadNextAsset again via useEffect
     }
-  }, [assets, getImageWithRetry, isAVisible]);
+  }, [assetIndex, currentAssets, getImageWithRetry, isAVisible]);
 
 
   // --- Effects ---
 
-  // Initial asset loading
+  // Main logic to find and load a suitable album with assets
   useEffect(() => {
     if (areConfigsMissing) {
       setError("Server URL or API Key is missing. Please check your environment variables.");
@@ -139,113 +158,118 @@ export default function Home() {
       return;
     }
 
-    const fetchInitialData = async () => {
-      try {
-        // 1. Fetch all albums
-        const albumsResponse = await fetch(`${PROXY_URL}/albums`, {
-          headers: { 
-            'x-api-key': API_KEY as string, 
-            'Accept': 'application/json',
-          },
-        });
-
-        if (!albumsResponse.ok) {
-           const errorData = await albumsResponse.json();
-          throw new Error(`Failed to fetch albums: ${albumsResponse.statusText} - ${errorData.message}`);
-        }
-        
-        const albums: ImmichAlbum[] = await albumsResponse.json();
-
-        if (albums.length === 0) {
-          setError("No albums found on the server.");
+    const findAndLoadAlbum = async () => {
+      setIsLoading(true);
+      setError(null);
+    
+      // 1. Fetch all albums if the playlist is empty
+      if (albumPlaylist.current.length === 0) {
+        try {
+          const albumsResponse = await fetch(`${PROXY_URL}/albums`, {
+            headers: { 'x-api-key': API_KEY as string, 'Accept': 'application/json' },
+          });
+          if (!albumsResponse.ok) throw new Error('Failed to fetch album list.');
+          const allAlbums: ImmichAlbum[] = await albumsResponse.json();
+          
+          if (allAlbums.length === 0) {
+            setError("No albums found on the Immich server.");
+            setIsLoading(false);
+            return;
+          }
+          albumPlaylist.current = shuffleArray(allAlbums);
+        } catch (e: any) {
+          setError(`Failed to connect to Immich server: ${e.message}`);
           setIsLoading(false);
           return;
         }
-
-        // 2. Pick a random album
-        const randomAlbum = albums[Math.floor(Math.random() * albums.length)];
-        setCurrentAlbum(randomAlbum);
-
-        // 3. Fetch that album's details (which includes the asset list)
-         const albumDetailsResponse = await fetch(`${PROXY_URL}/albums/${randomAlbum.id}`, {
-          headers: {
-            'x-api-key': API_KEY as string,
-            'Accept': 'application/json',
-          },
-        });
-
-        if (!albumDetailsResponse.ok) {
-          const errorData = await albumDetailsResponse.json();
-          throw new Error(`Failed to fetch album details: ${albumDetailsResponse.statusText} - ${errorData.message}`);
-        }
-
-        const albumWithAssets: ImmichAlbum = await albumDetailsResponse.json();
-        
-        let fetchedAssets = albumWithAssets.assets;
-
-        // 4. Filter for favorites if required
-        if (IS_FAVORITE_ONLY) {
-          fetchedAssets = fetchedAssets.filter(asset => asset.isFavorite);
-        }
-        
-        // 5. Filter for orientation if required
-        if (IMAGE_ORIENTATION === 'portrait' || IMAGE_ORIENTATION === 'landscape') {
-            const originalCount = fetchedAssets.length;
-            fetchedAssets = fetchedAssets.filter(asset => {
-                const height = asset.exifInfo?.imageHeight ?? 0;
-                const width = asset.exifInfo?.imageWidth ?? 0;
-                if (height === 0 || width === 0) return false; // Exclude if dimensions are unknown
-                
-                return IMAGE_ORIENTATION === 'portrait' ? height > width : width > height;
-            });
-
-            if (fetchedAssets.length === 0) {
-                 setError(`No ${IMAGE_ORIENTATION} photos found in the album "${albumWithAssets.albumName}" (checked ${originalCount} photos).`);
-                 setIsLoading(false);
-                 return;
-            }
-        }
-        
-        setCurrentAlbum(albumWithAssets);
-
-
-        // 6. Shuffle and set assets, then load the first image
-        const shuffledAssets = shuffleArray(fetchedAssets);
-        setAssets(shuffledAssets);
-
-        const firstAssetUrl = await getImageWithRetry(shuffledAssets[0].id);
-        if (firstAssetUrl) {
-          setImageA({ url: firstAssetUrl, id: shuffledAssets[0].id });
-        } else {
-           setError(`Could not load the first image from album "${albumWithAssets.albumName}".`);
-           // Try next one if first fails
-           const nextIndex = (0 + 1) % shuffledAssets.length;
-           setCurrentIndex(nextIndex);
-        }
-        setIsLoading(false);
-
-      } catch (e: any) {
-        console.error(e);
-        setError(e.message);
-        setIsLoading(false);
       }
+
+      // 2. Iterate through the album playlist to find one with matching photos
+      let foundSuitableAlbum = false;
+      const initialAlbumIndex = albumIndex.current;
+      
+      while (!foundSuitableAlbum) {
+        const targetAlbum = albumPlaylist.current[albumIndex.current];
+
+        try {
+          const albumDetailsResponse = await fetch(`${PROXY_URL}/albums/${targetAlbum.id}`, {
+            headers: { 'x-api-key': API_KEY as string, 'Accept': 'application/json' },
+          });
+          if (!albumDetailsResponse.ok) throw new Error(`Could not fetch details for album ${targetAlbum.albumName}.`);
+          
+          const albumWithAssets: ImmichAlbum = await albumDetailsResponse.json();
+          let fetchedAssets = albumWithAssets.assets;
+
+          if (IS_FAVORITE_ONLY) {
+            fetchedAssets = fetchedAssets.filter(asset => asset.isFavorite);
+          }
+
+          if (IMAGE_ORIENTATION === 'portrait' || IMAGE_ORIENTATION === 'landscape') {
+            fetchedAssets = fetchedAssets.filter(asset => {
+              const height = asset.exifInfo?.imageHeight ?? 0;
+              const width = asset.exifInfo?.imageWidth ?? 0;
+              if (height === 0 || width === 0) return false;
+              return IMAGE_ORIENTATION === 'portrait' ? height > width : width > height;
+            });
+          }
+
+          if (fetchedAssets.length > 0) {
+            const shuffledAssets = shuffleArray(fetchedAssets);
+            setCurrentAlbum(albumWithAssets);
+            setCurrentAssets(shuffledAssets);
+            setAssetIndex(0);
+
+            const firstAssetUrl = await getImageWithRetry(shuffledAssets[0].id);
+            if (firstAssetUrl) {
+              setImageA({ url: firstAssetUrl, id: shuffledAssets[0].id });
+              setImageB({ url: '', id: 'clearedB' }); // Ensure B is cleared
+              setIsAVisible(true);
+            } else {
+              throw new Error('Could not load first image of the album.');
+            }
+            foundSuitableAlbum = true;
+          } else {
+             // Move to the next album
+            albumIndex.current = (albumIndex.current + 1) % albumPlaylist.current.length;
+            // If we've looped through all albums and found nothing
+            if (albumIndex.current === initialAlbumIndex) {
+              setError(`No photos matching the '${IMAGE_ORIENTATION}' orientation filter could be found in any of your ${albumPlaylist.current.length} albums.`);
+              setIsLoading(false);
+              return;
+            }
+          }
+        } catch (e: any) {
+          console.error(e);
+          // Try next album on error
+          albumIndex.current = (albumIndex.current + 1) % albumPlaylist.current.length;
+          if (albumIndex.current === initialAlbumIndex) {
+            setError(`After trying all albums, failed to load any photos. Last error: ${e.message}`);
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+      setIsLoading(false);
     };
-    fetchInitialData();
-  }, [areConfigsMissing, getImageWithRetry]);
+
+    // This effect should only run when we need to load a new album,
+    // which is on startup or when currentAssets becomes empty.
+    if(currentAssets.length === 0 && !areConfigsMissing) {
+        findAndLoadAlbum();
+    }
+
+  }, [areConfigsMissing, getImageWithRetry, currentAssets.length]);
 
   // Image rotation timer
   useEffect(() => {
-    if (assets.length === 0 || isLoading) return;
+    if (currentAssets.length === 0 || isLoading || error) return;
     
     const timer = setTimeout(() => {
-        const nextAssetIndex = (currentIndex + 1) % assets.length;
-        // Don't await here, let it run in the background
-        loadNextImage(nextAssetIndex);
-        setCurrentIndex(nextAssetIndex);
+      loadNextAsset();
     }, DURATION);
 
     return () => clearTimeout(timer);
-  }, [currentIndex, assets, isLoading, loadNextImage]);
+  }, [assetIndex, currentAssets, isLoading, error, loadNextAsset]);
   
   // When next image is loaded, trigger the visibility switch
   useEffect(() => {
@@ -278,7 +302,7 @@ export default function Home() {
       setProgress(p => Math.min(p + (100 / (DURATION / 100)), 100));
     }, 100);
     return () => clearInterval(interval);
-  }, [currentIndex, isLoading, error]); 
+  }, [assetIndex, isLoading, error]); 
 
   // Clock
   useEffect(() => {
@@ -296,7 +320,7 @@ export default function Home() {
     return (
       <div className="flex h-screen w-screen flex-col items-center justify-center bg-background text-foreground">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="mt-4 text-lg">Connecting to Immich...</p>
+        <p className="mt-4 text-lg">Searching for photos...</p>
       </div>
     );
   }
@@ -304,7 +328,7 @@ export default function Home() {
   if (error) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background p-8">
-        <Alert variant="destructive" className="max-w-md">
+        <Alert variant="destructive" className="max-w-lg">
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
@@ -313,14 +337,14 @@ export default function Home() {
     );
   }
   
-  if (assets.length === 0) {
+  if (currentAssets.length === 0 && !isLoading) {
      return (
       <div className="flex h-screen w-screen items-center justify-center bg-background p-8">
         <Alert className="max-w-md">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>No Photos</AlertTitle>
+          <AlertTitle>No Photos To Display</AlertTitle>
           <AlertDescription>
-            Could not find any photos to display. Check your Immich server and album configuration.
+            Could not find any suitable photos on your Immich server. Check your configuration and albums.
           </AlertDescription>
         </Alert>
       </div>
@@ -427,3 +451,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
