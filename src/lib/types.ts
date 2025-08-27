@@ -26,4 +26,5 @@ export interface ImmichAlbum {
   albumThumbnailAssetId: string | null;
   shared: boolean;
   assetCount: number;
+  assets: ImmichAsset[];
 }

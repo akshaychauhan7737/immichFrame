@@ -81,33 +81,70 @@ export default function Home() {
       return;
     }
 
-    const fetchAlbums = async () => {
+    const fetchInitialData = async () => {
       try {
-        const response = await fetch(`${PROXY_URL}/albums`, {
+        // 1. Fetch all albums
+        const albumsResponse = await fetch(`${PROXY_URL}/albums`, {
           headers: { 
             'x-api-key': API_KEY as string, 
             'Accept': 'application/json',
           },
         });
 
-        if (!response.ok) {
-           const errorData = await response.json();
-          throw new Error(`Failed to fetch albums: ${response.statusText} - ${errorData.message}`);
+        if (!albumsResponse.ok) {
+           const errorData = await albumsResponse.json();
+          throw new Error(`Failed to fetch albums: ${albumsResponse.statusText} - ${errorData.message}`);
         }
         
-        const data: ImmichAlbum[] = await response.json();
-        console.log("Successfully fetched albums:", data);
+        const albums: ImmichAlbum[] = await albumsResponse.json();
 
-        if (data.length === 0) {
+        if (albums.length === 0) {
           setError("No albums found on the server.");
           setIsLoading(false);
           return;
         }
 
-        // For now, let's just stop loading. We'll add asset fetching logic next.
-        setError("Album fetch successful. Next step: fetch assets from an album.");
-        setIsLoading(false);
+        // 2. Pick a random album
+        const randomAlbum = albums[Math.floor(Math.random() * albums.length)];
 
+        // 3. Fetch that album's details (which includes the asset list)
+         const albumDetailsResponse = await fetch(`${PROXY_URL}/albums/${randomAlbum.id}`, {
+          headers: {
+            'x-api-key': API_KEY as string,
+            'Accept': 'application/json',
+          },
+        });
+
+        if (!albumDetailsResponse.ok) {
+          const errorData = await albumDetailsResponse.json();
+          throw new Error(`Failed to fetch album details: ${albumDetailsResponse.statusText} - ${errorData.message}`);
+        }
+
+        const albumWithAssets: ImmichAlbum = await albumDetailsResponse.json();
+        let fetchedAssets = albumWithAssets.assets;
+
+        // 4. Filter for favorites if required
+        if (IS_FAVORITE_ONLY) {
+          fetchedAssets = fetchedAssets.filter(asset => asset.isFavorite);
+        }
+        
+        if (fetchedAssets.length === 0) {
+          setError(`No${IS_FAVORITE_ONLY ? ' favorite' : ''} photos found in the selected album "${albumWithAssets.albumName}".`);
+          setIsLoading(false);
+          return;
+        }
+
+        // 5. Shuffle and set assets, then load the first image
+        const shuffledAssets = shuffleArray(fetchedAssets);
+        setAssets(shuffledAssets);
+
+        const firstAssetUrl = await getImageUrl(shuffledAssets[0].id);
+        if (firstAssetUrl) {
+          setImageA({ url: firstAssetUrl, id: shuffledAssets[0].id });
+        } else {
+           setError(`Could not load the first image from album "${albumWithAssets.albumName}".`);
+        }
+        setIsLoading(false);
 
       } catch (e: any) {
         console.error(e);
@@ -115,7 +152,7 @@ export default function Home() {
         setIsLoading(false);
       }
     };
-    fetchAlbums();
+    fetchInitialData();
   }, [areConfigsMissing, getImageUrl]);
 
   // Image rotation timer
@@ -182,10 +219,24 @@ export default function Home() {
   if (error) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background p-8">
-        <Alert variant={error.startsWith("Album fetch successful") ? "default" : "destructive"} className="max-w-md">
+        <Alert variant="destructive" className="max-w-md">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>{error.startsWith("Album fetch successful") ? "Next Step" : "Error"}</AlertTitle>
+          <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+  
+  if (assets.length === 0) {
+     return (
+      <div className="flex h-screen w-screen items-center justify-center bg-background p-8">
+        <Alert className="max-w-md">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>No Photos</AlertTitle>
+          <AlertDescription>
+            Could not find any photos to display. Check your Immich server and album configuration.
+          </AlertDescription>
         </Alert>
       </div>
     );
