@@ -1,3 +1,4 @@
+
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
@@ -28,11 +29,13 @@ const nextConfig: NextConfig = {
     if (!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL) {
       return [];
     }
+    // The destination server must be the root of the Immich instance.
+    // The rewrite rule will append the `/api` path.
     const immichUrl = new URL(process.env.NEXT_PUBLIC_IMMICH_SERVER_URL);
     return [
       {
         source: '/api/immich/:path*',
-        destination: `${immichUrl.origin}/api/:path*`,
+        destination: `${immichUrl.origin}/:path*`,
       },
     ];
   },
