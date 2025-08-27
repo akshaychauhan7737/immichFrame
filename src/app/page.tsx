@@ -50,8 +50,7 @@ export default function Home() {
   const getImageUrl = useCallback(async (assetId: string): Promise<string | null> => {
     if (areConfigsMissing) return null;
     try {
-      // Corrected endpoint for fetching the file
-      const res = await fetch(`${PROXY_URL}/asset/file/${assetId}`, {
+      const res = await fetch(`${PROXY_URL}/assets/${assetId}/thumbnail?size=preview`, {
         method: 'GET',
         headers: { 'x-api-key': API_KEY as string },
       });
@@ -60,14 +59,14 @@ export default function Home() {
       }
       const blob = await res.blob();
       return URL.createObjectURL(blob);
-    } catch (e: any) {
-      console.error(e);
-      toast({
-        variant: "destructive",
-        title: "Image Fetch Error",
-        description: `Could not load image ${assetId}.`,
-      });
-      return null;
+    } catch (e: any)      {
+        console.error(e);
+        toast({
+            variant: "destructive",
+            title: "Image Fetch Error",
+            description: `Could not load image ${assetId}.`,
+        });
+        return null;
     }
   }, [areConfigsMissing, toast]);
 
