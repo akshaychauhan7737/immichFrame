@@ -15,3 +15,15 @@ export interface ImmichAsset {
   isArchived: boolean;
   // There are more fields, but these are the most relevant for this app.
 }
+
+export interface ImmichAlbum {
+  id: string;
+  albumName: string;
+  description: string;
+  ownerId: string;
+  createdAt: string;
+  updatedAt: string;
+  albumThumbnailAssetId: string | null;
+  shared: boolean;
+  assetCount: number;
+}

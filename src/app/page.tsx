@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { ImmichAsset } from '@/lib/types';
+import type { ImmichAlbum, ImmichAsset } from '@/lib/types';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { Progress } from "@/components/ui/progress";
@@ -52,7 +52,7 @@ export default function Home() {
     try {
       // Corrected endpoint for fetching the file
       const res = await fetch(`${PROXY_URL}/asset/file/${assetId}`, {
-        method: 'GET', // Use POST for file download as per Immich docs for API key auth in headers
+        method: 'GET',
         headers: { 'x-api-key': API_KEY as string },
       });
       if (!res.ok) {
@@ -81,57 +81,41 @@ export default function Home() {
       return;
     }
 
-    const fetchAssets = async () => {
+    const fetchAlbums = async () => {
       try {
-        const response = await fetch(`${PROXY_URL}/asset`, {
+        const response = await fetch(`${PROXY_URL}/albums`, {
           headers: { 
             'x-api-key': API_KEY as string, 
             'Accept': 'application/json',
-            'Content-Type': 'application/json',
           },
         });
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch assets: ${response.statusText}`);
+           const errorData = await response.json();
+          throw new Error(`Failed to fetch albums: ${response.statusText} - ${errorData.message}`);
         }
         
-        const data: ImmichAsset[] = await response.json();
-        
-        let imageAssets = data.filter(asset => asset.type === 'IMAGE' && !asset.isArchived);
+        const data: ImmichAlbum[] = await response.json();
+        console.log("Successfully fetched albums:", data);
 
-        if (IS_FAVORITE_ONLY) {
-          imageAssets = imageAssets.filter(asset => asset.isFavorite);
-        }
-
-        if (imageAssets.length === 0) {
-          setError("No images found on the server with the current criteria.");
+        if (data.length === 0) {
+          setError("No albums found on the server.");
           setIsLoading(false);
           return;
         }
 
-        const shuffledAssets = shuffleArray(imageAssets);
-        setAssets(shuffledAssets);
+        // For now, let's just stop loading. We'll add asset fetching logic next.
+        setError("Album fetch successful. Next step: fetch assets from an album.");
+        setIsLoading(false);
 
-        // Preload first two images
-        const firstUrl = await getImageUrl(shuffledAssets[0].id);
-        if (firstUrl) setImageA({ url: firstUrl, id: shuffledAssets[0].id });
-
-        if (shuffledAssets.length > 1) {
-          const secondUrl = await getImageUrl(shuffledAssets[1].id);
-          if (secondUrl) setImageB({ url: secondUrl, id: shuffledAssets[1].id });
-        } else {
-          // If only one image, just use it for both slots
-          if (firstUrl) setImageB({ url: firstUrl, id: shuffledAssets[0].id });
-        }
 
       } catch (e: any) {
         console.error(e);
         setError(e.message);
-      } finally {
         setIsLoading(false);
       }
     };
-    fetchAssets();
+    fetchAlbums();
   }, [areConfigsMissing, getImageUrl]);
 
   // Image rotation timer
@@ -198,9 +182,9 @@ export default function Home() {
   if (error) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-background p-8">
-        <Alert variant="destructive" className="max-w-md">
+        <Alert variant={error.startsWith("Album fetch successful") ? "default" : "destructive"} className="max-w-md">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
+          <AlertTitle>{error.startsWith("Album fetch successful") ? "Next Step" : "Error"}</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>
