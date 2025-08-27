@@ -352,7 +352,7 @@ export default function Home() {
   }
 
   const location = [currentAsset?.exifInfo?.city, currentAsset?.exifInfo?.country].filter(Boolean).join(', ');
-  const dateString = currentAsset?.exifInfo?.dateTimeOriginal ?? currentAsset?.createdAt;
+  const dateString = currentAsset?.exifInfo?.dateTimeOriginal;
   const photoDate = dateString ? new Date(dateString) : null;
   const isDateValid = photoDate && !isNaN(photoDate.getTime());
 
