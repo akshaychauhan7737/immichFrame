@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
 // We use a local proxy to avoid CORS issues.
-const PROXY_URL = '/api/immich/api';
+const PROXY_URL = '/api/immich';
 const SERVER_URL_CONFIGURED = !!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
 const API_KEY = process.env.NEXT_PUBLIC_IMMICH_API_KEY;
 const IS_FAVORITE_ONLY = process.env.NEXT_PUBLIC_IMMICH_IS_FAVORITE_ONLY === 'true';
