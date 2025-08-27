@@ -18,6 +18,7 @@ export interface ImmichAsset {
     country?: string;
     exifImageWidth?: number;
     exifImageHeight?: number;
+    dateTimeOriginal?: string;
     [key: string]: any;
   }
 }

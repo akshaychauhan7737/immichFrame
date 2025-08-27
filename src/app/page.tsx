@@ -352,8 +352,9 @@ export default function Home() {
   }
 
   const location = [currentAsset?.exifInfo?.city, currentAsset?.exifInfo?.country].filter(Boolean).join(', ');
-  const createdAtDate = currentAsset?.createdAt ? new Date(currentAsset.createdAt) : null;
-  const isDateValid = createdAtDate && !isNaN(createdAtDate.getTime());
+  const dateString = currentAsset?.exifInfo?.dateTimeOriginal ?? currentAsset?.createdAt;
+  const photoDate = dateString ? new Date(dateString) : null;
+  const isDateValid = photoDate && !isNaN(photoDate.getTime());
 
 
   return (
@@ -437,9 +438,9 @@ export default function Home() {
                           <Folder size={20} className="shrink-0" />
                       </div>
                   )}
-                  {currentAsset && isDateValid && (
+                  {currentAsset && isDateValid && photoDate && (
                        <div className="flex items-center gap-2">
-                           <span>{format(createdAtDate, 'MMMM d, yyyy')}</span>
+                           <span>{format(photoDate, 'MMMM d, yyyy')}</span>
                           <Calendar size={20} className="shrink-0" />
                       </div>
                   )}
