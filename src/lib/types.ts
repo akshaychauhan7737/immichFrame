@@ -13,7 +13,11 @@ export interface ImmichAsset {
   mimeType: string | null;
   duration: string | null;
   isArchived: boolean;
-  // There are more fields, but these are the most relevant for this app.
+  exifInfo?: {
+    city?: string;
+    country?: string;
+    [key: string]: any;
+  }
 }
 
 export interface ImmichAlbum {
@@ -27,4 +31,5 @@ export interface ImmichAlbum {
   shared: boolean;
   assetCount: number;
   assets: ImmichAsset[];
+  startDate: string;
 }

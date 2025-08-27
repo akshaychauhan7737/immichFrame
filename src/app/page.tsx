@@ -6,9 +6,10 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, MapPin, Calendar, Folder } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
 
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
@@ -38,6 +39,7 @@ export default function Home() {
   
   // --- State Management ---
   const [assets, setAssets] = useState<ImmichAsset[]>([]);
+  const [currentAlbum, setCurrentAlbum] = useState<ImmichAlbum | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +53,8 @@ export default function Home() {
 
 
   const areConfigsMissing = useMemo(() => !SERVER_URL_CONFIGURED || !API_KEY, []);
+  
+  const currentAsset = useMemo(() => assets[currentIndex], [assets, currentIndex]);
 
   // --- Image Fetching Logic ---
   const getImageUrl = useCallback(async (assetId: string): Promise<string | null> => {
@@ -158,6 +162,7 @@ export default function Home() {
 
         // 2. Pick a random album
         const randomAlbum = albums[Math.floor(Math.random() * albums.length)];
+        setCurrentAlbum(randomAlbum);
 
         // 3. Fetch that album's details (which includes the asset list)
          const albumDetailsResponse = await fetch(`${PROXY_URL}/albums/${randomAlbum.id}`, {
@@ -173,6 +178,7 @@ export default function Home() {
         }
 
         const albumWithAssets: ImmichAlbum = await albumDetailsResponse.json();
+        setCurrentAlbum(albumWithAssets);
         let fetchedAssets = albumWithAssets.assets;
 
         // 4. Filter for favorites if required
@@ -216,9 +222,9 @@ export default function Home() {
     
     const timer = setTimeout(() => {
         const nextAssetIndex = (currentIndex + 1) % assets.length;
+        setCurrentIndex(nextAssetIndex);
         // Don't await here, let it run in the background
         loadNextImage(nextAssetIndex);
-        setCurrentIndex(nextAssetIndex);
     }, DURATION);
 
     return () => clearTimeout(timer);
@@ -304,6 +310,8 @@ export default function Home() {
     );
   }
 
+  const location = [currentAsset?.exifInfo?.city, currentAsset?.exifInfo?.country].filter(Boolean).join(', ');
+
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-black">
       {/* Image A Container */}
@@ -364,14 +372,39 @@ export default function Home() {
         )}
       </div>
 
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-start p-4 md:p-6">
-        <div className="flex w-full items-end">
-          <div className="rounded-lg bg-black/30 px-4 py-2 text-4xl font-semibold text-white backdrop-blur-md md:text-6xl">
-            {currentTime}
-          </div>
-        </div>
-        <div className="w-full pt-4">
-          <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white/80" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-start p-4 md:p-6 text-white">
+        <div className="w-full space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-md">
+            {/* Info Section */}
+            <div className="flex flex-col text-lg md:text-xl font-medium">
+                {currentAlbum && (
+                    <div className="flex items-center gap-2">
+                        <Folder size={20} className="shrink-0" />
+                        <span>{currentAlbum.albumName}</span>
+                    </div>
+                )}
+                {currentAsset && (
+                     <div className="flex items-center gap-2">
+                        <Calendar size={20} className="shrink-0" />
+                        <span>{format(new Date(currentAsset.createdAt), 'MMMM d, yyyy')}</span>
+                    </div>
+                )}
+                {location && (
+                    <div className="flex items-center gap-2">
+                        <MapPin size={20} className="shrink-0" />
+                        <span>{location}</span>
+                    </div>
+                )}
+            </div>
+
+            {/* Clock and Progress */}
+            <div className="flex w-full items-end gap-4 pt-2">
+              <div className="text-4xl font-semibold md:text-6xl">
+                {currentTime}
+              </div>
+            </div>
+            <div className="w-full pt-2">
+              <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white/80" />
+            </div>
         </div>
       </div>
     </main>
