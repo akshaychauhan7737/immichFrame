@@ -178,7 +178,7 @@ export default function Home() {
         }
 
         const albumWithAssets: ImmichAlbum = await albumDetailsResponse.json();
-        setCurrentAlbum(albumWithAssets);
+        
         let fetchedAssets = albumWithAssets.assets;
 
         // 4. Filter for favorites if required
@@ -186,14 +186,23 @@ export default function Home() {
           fetchedAssets = fetchedAssets.filter(asset => asset.isFavorite);
         }
         
-        if (fetchedAssets.length === 0) {
-          setError(`No${IS_FAVORITE_ONLY ? ' favorite' : ''} photos found in the selected album "${albumWithAssets.albumName}".`);
-          setIsLoading(false);
-          return;
-        }
+        // 5. Filter for portrait images
+        let portraitAssets = fetchedAssets.filter(asset => 
+            asset.exifInfo && 
+            (asset.exifInfo.imageHeight ?? 0) > (asset.exifInfo.imageWidth ?? 0)
+        );
 
-        // 5. Shuffle and set assets, then load the first image
-        const shuffledAssets = shuffleArray(fetchedAssets);
+        if (portraitAssets.length === 0) {
+            setError(`No portrait photos found in the selected album "${albumWithAssets.albumName}".`);
+            setIsLoading(false);
+            return;
+        }
+        
+        setCurrentAlbum(albumWithAssets);
+
+
+        // 6. Shuffle and set assets, then load the first image
+        const shuffledAssets = shuffleArray(portraitAssets);
         setAssets(shuffledAssets);
 
         const firstAssetUrl = await getImageWithRetry(shuffledAssets[0].id);
@@ -410,3 +419,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
