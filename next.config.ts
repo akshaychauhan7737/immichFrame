@@ -24,6 +24,18 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async rewrites() {
+    if (!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL) {
+      return [];
+    }
+    const immichUrl = new URL(process.env.NEXT_PUBLIC_IMMICH_SERVER_URL);
+    return [
+      {
+        source: '/api/immich/:path*',
+        destination: `${immichUrl.origin}/api/:path*`,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

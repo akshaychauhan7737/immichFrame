@@ -11,9 +11,12 @@ import { useToast } from '@/hooks/use-toast';
 
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
-const SERVER_URL = process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
+// We use a local proxy to avoid CORS issues.
+const PROXY_URL = '/api/immich';
+const SERVER_URL_CONFIGURED = !!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
 const API_KEY = process.env.NEXT_PUBLIC_IMMICH_API_KEY;
 const IS_FAVORITE_ONLY = process.env.NEXT_PUBLIC_IMMICH_IS_FAVORITE_ONLY === 'true';
+
 
 // --- Helper Functions ---
 function shuffleArray<T>(array: T[]): T[] {
@@ -40,13 +43,13 @@ export default function Home() {
   const [imageB, setImageB] = useState<{ url: string, id: string }>({ url: '', id: 'initialB' });
   const [isAVisible, setIsAVisible] = useState(true);
 
-  const areConfigsMissing = useMemo(() => !SERVER_URL || !API_KEY, []);
+  const areConfigsMissing = useMemo(() => !SERVER_URL_CONFIGURED || !API_KEY, []);
 
   // --- Image Fetching Logic ---
   const getImageUrl = useCallback(async (assetId: string): Promise<string | null> => {
     if (areConfigsMissing) return null;
     try {
-      const res = await fetch(`${SERVER_URL}/api/asset/file/${assetId}`, {
+      const res = await fetch(`${PROXY_URL}/asset/file/${assetId}`, {
         headers: { 'x-api-key': API_KEY as string },
       });
       if (!res.ok) {
@@ -77,7 +80,7 @@ export default function Home() {
 
     const fetchAssets = async () => {
       try {
-        const response = await fetch(`${SERVER_URL}/api/asset?isFavorite=${IS_FAVORITE_ONLY}`, {
+        const response = await fetch(`${PROXY_URL}/asset?isFavorite=${IS_FAVORITE_ONLY}`, {
           headers: { 'x-api-key': API_KEY as string, 'Accept': 'application/json' },
         });
         if (!response.ok) throw new Error(`Failed to fetch assets: ${response.statusText}`);
