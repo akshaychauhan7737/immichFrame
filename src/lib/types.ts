@@ -1,3 +1,4 @@
+
 export interface ImmichAsset {
   id: string;
   deviceAssetId: string;
@@ -11,5 +12,6 @@ export interface ImmichAsset {
   isFavorite: boolean;
   mimeType: string | null;
   duration: string | null;
+  isArchived: boolean;
   // There are more fields, but these are the most relevant for this app.
 }

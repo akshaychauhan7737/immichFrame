@@ -52,7 +52,7 @@ export default function Home() {
     try {
       // Corrected endpoint for fetching the file
       const res = await fetch(`${PROXY_URL}/asset/file/${assetId}`, {
-        method: 'POST', // Use POST for file download as per Immich docs for API key auth in headers
+        method: 'GET', // Use POST for file download as per Immich docs for API key auth in headers
         headers: { 'x-api-key': API_KEY as string },
       });
       if (!res.ok) {
@@ -83,24 +83,25 @@ export default function Home() {
 
     const fetchAssets = async () => {
       try {
-        const params = new URLSearchParams({
-            isFavorite: IS_FAVORITE_ONLY.toString(),
-            isArchived: 'false',
-        });
-        // Corrected endpoint for fetching assets list
-        const response = await fetch(`${PROXY_URL}/assets?${params.toString()}`, {
-          headers: { 'x-api-key': API_KEY as string, 'Accept': 'application/json' },
+        const response = await fetch(`${PROXY_URL}/asset`, {
+          headers: { 
+            'x-api-key': API_KEY as string, 
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
         });
 
         if (!response.ok) {
-          if (response.status === 404) {
-            throw new Error("Failed to fetch assets: Not Found. Please check your Immich server URL and API endpoint (/api/assets).");
-          }
           throw new Error(`Failed to fetch assets: ${response.statusText}`);
         }
         
         const data: ImmichAsset[] = await response.json();
-        const imageAssets = data.filter(asset => asset.type === 'IMAGE');
+        
+        let imageAssets = data.filter(asset => asset.type === 'IMAGE' && !asset.isArchived);
+
+        if (IS_FAVORITE_ONLY) {
+          imageAssets = imageAssets.filter(asset => asset.isFavorite);
+        }
 
         if (imageAssets.length === 0) {
           setError("No images found on the server with the current criteria.");
