@@ -90,7 +90,13 @@ export default function Home() {
         const response = await fetch(`${PROXY_URL}/asset?${params.toString()}`, {
           headers: { 'x-api-key': API_KEY as string, 'Accept': 'application/json' },
         });
-        if (!response.ok) throw new Error(`Failed to fetch assets: ${response.statusText}`);
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error("Failed to fetch assets: Not Found. Please check your Immich server URL and API endpoint.");
+          }
+          throw new Error(`Failed to fetch assets: ${response.statusText}`);
+        }
         
         const data: ImmichAsset[] = await response.json();
         const imageAssets = data.filter(asset => asset.type === 'IMAGE');
