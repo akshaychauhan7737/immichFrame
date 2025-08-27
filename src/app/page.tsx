@@ -105,6 +105,8 @@ export default function Home() {
     if (assets.length === 0) return;
     
     const nextAsset = assets[nextIndex];
+    if (!nextAsset) return;
+
     const newUrl = await getImageWithRetry(nextAsset.id);
 
     if (newUrl) {
@@ -212,11 +214,11 @@ export default function Home() {
   useEffect(() => {
     if (assets.length === 0 || isLoading) return;
     
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
         const nextAssetIndex = (currentIndex + 1) % assets.length;
-        await loadNextImage(nextAssetIndex);
+        // Don't await here, let it run in the background
+        loadNextImage(nextAssetIndex);
         setCurrentIndex(nextAssetIndex);
-
     }, DURATION);
 
     return () => clearTimeout(timer);
@@ -224,32 +226,23 @@ export default function Home() {
   
   // When next image is loaded, trigger the visibility switch
   useEffect(() => {
-    // Only run this effect when the next image has loaded
     if (!nextImageLoaded) return;
     
-    // Determine which URL belongs to the image that is now hidden and needs to be cleaned up.
-    // If A is now visible, B was the old one. If A is not visible, it was the old one.
-    const oldUrlToRevoke = isAVisible ? imageB.url : imageA.url;
-    
-    // Flip visibility
-    setIsAVisible(prev => !prev);
-    // Reset the loaded flag
+    const newIsAVisible = !isAVisible;
+    setIsAVisible(newIsAVisible);
     setNextImageLoaded(false);
 
     // After the transition starts, clean up the old image's Object URL
     // to prevent memory leaks.
-    if(oldUrlToRevoke) {
-        // Wait for the fade-out to complete before revoking the URL
-        setTimeout(() => {
-            URL.revokeObjectURL(oldUrlToRevoke);
-            // Also clear the state to prevent re-rendering of the old image
-             if (isAVisible) { 
-                setImageB({url: '', id: 'clearedB'});
-            } else {
-                setImageA({url: '', id: 'clearedA'});
-            }
-        }, 1000); // This should match the transition duration
-    }
+    setTimeout(() => {
+        if (newIsAVisible) { // A is now visible, so B was the old one
+            if(imageB.url) URL.revokeObjectURL(imageB.url);
+            setImageB({url: '', id: 'clearedB'});
+        } else { // B is now visible, so A was the old one
+            if(imageA.url) URL.revokeObjectURL(imageA.url);
+            setImageA({url: '', id: 'clearedA'});
+        }
+    }, 1000); // This should match the CSS transition duration
 
   }, [nextImageLoaded, isAVisible, imageA.url, imageB.url]);
 
@@ -262,7 +255,7 @@ export default function Home() {
       setProgress(p => Math.min(p + (100 / (DURATION / 100)), 100));
     }, 100);
     return () => clearInterval(interval);
-  }, [currentIndex, isLoading, error, isAVisible]); // Add isAVisible to restart on change
+  }, [currentIndex, isLoading, error]); 
 
   // Clock
   useEffect(() => {
@@ -317,7 +310,6 @@ export default function Home() {
       <div className={cn('absolute inset-0 transition-opacity duration-1000 ease-in-out', isAVisible ? 'opacity-100' : 'opacity-0')}>
         {imageA.url && (
           <>
-            {/* Background Image A */}
             <Image
               key={`${imageA.id}-bg`}
               src={imageA.url}
@@ -327,7 +319,6 @@ export default function Home() {
               className="object-cover blur-2xl scale-110"
               unoptimized
             />
-            {/* Foreground Image A */}
             <Image
               key={imageA.id}
               src={imageA.url}
@@ -335,7 +326,6 @@ export default function Home() {
               fill
               className="object-contain"
               onLoad={() => {
-                 // If A is not supposed to be visible, it means it's the next image loading in the background.
                  if (!isAVisible) setNextImageLoaded(true);
               }}
               priority
@@ -349,7 +339,6 @@ export default function Home() {
       <div className={cn('absolute inset-0 transition-opacity duration-1000 ease-in-out', !isAVisible ? 'opacity-100' : 'opacity-0')}>
         {imageB.url && (
           <>
-            {/* Background Image B */}
             <Image
               key={`${imageB.id}-bg`}
               src={imageB.url}
@@ -359,7 +348,6 @@ export default function Home() {
               className="object-cover blur-2xl scale-110"
               unoptimized
             />
-            {/* Foreground Image B */}
             <Image
               key={imageB.id}
               src={imageB.url}
@@ -367,7 +355,6 @@ export default function Home() {
               fill
               className="object-contain"
               onLoad={() => {
-                // If A is visible, it means B is the next image loading in the background.
                 if (isAVisible) setNextImageLoaded(true);
               }}
               priority
