@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, AlertTriangle, MapPin, Calendar, Folder } from 'lucide-react';
+import { Loader2, AlertTriangle, MapPin, Calendar, Folder, Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -14,14 +14,18 @@ import { format } from 'date-fns';
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
 const RETRY_DELAY = 5000; // 5 seconds
-const DISPLAY_MODE = process.env.NEXT_PUBLIC_DISPLAY_MODE; // 'portrait', 'landscape', or 'all'
+const WEATHER_REFRESH_INTERVAL = 15 * 60 * 1000; // 15 minutes
 
-// We use a local proxy to avoid CORS issues.
-const PROXY_URL = '/api/immich';
+// --- Environment Variable-based Configuration ---
+const DISPLAY_MODE = process.env.NEXT_PUBLIC_DISPLAY_MODE; // 'portrait', 'landscape', or 'all'
 const SERVER_URL_CONFIGURED = !!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
 const API_KEY = process.env.NEXT_PUBLIC_IMMICH_API_KEY;
 const IS_FAVORITE_ONLY = process.env.NEXT_PUBLIC_IMMICH_IS_FAVORITE_ONLY === 'true';
+const LATITUDE = process.env.NEXT_PUBLIC_LATITUDE;
+const LONGITUDE = process.env.NEXT_PUBLIC_LONGITUDE;
 
+// We use a local proxy to avoid CORS issues for Immich.
+const PROXY_URL = '/api/immich';
 
 // --- Helper Functions ---
 function shuffleArray<T>(array: T[]): T[] {
@@ -34,6 +38,20 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+const WeatherIcon = ({ code }: { code: number }) => {
+    let Icon = Cloud;
+    // Simple mapping based on WMO Weather interpretation codes
+    if ([0, 1].includes(code)) Icon = Sun;
+    if ([2].includes(code)) Icon = CloudSun;
+    if ([3].includes(code)) Icon = Cloud;
+    if ([45, 48].includes(code)) Icon = Cloud; // Fog
+    if (code >= 51 && code <= 67) Icon = CloudRain; // Drizzle/Rain
+    if (code >= 71 && code <= 77) Icon = Snowflake; // Snow
+    if (code >= 80 && code <= 82) Icon = CloudRain; // Showers
+    if (code >= 95) Icon = Zap; // Thunderstorm
+    return <Icon size={24} className="shrink-0" />;
+}
 
 
 export default function Home() {
@@ -49,6 +67,8 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
   const [progress, setProgress] = useState(0);
+  const [weather, setWeather] = useState<{ temperature: number; weatherCode: number; } | null>(null);
+
 
   const [imageA, setImageA] = useState<{ url: string, id: string }>({ url: '', id: 'initialA' });
   const [imageB, setImageB] = useState<{ url: string, id: string }>({ url: '', id: 'initialB' });
@@ -68,6 +88,9 @@ export default function Home() {
     }
     if (!['portrait', 'landscape', 'all'].includes(DISPLAY_MODE)) {
       return `Invalid value for NEXT_PUBLIC_DISPLAY_MODE. It must be one of 'portrait', 'landscape', or 'all'. Found: ${DISPLAY_MODE}`;
+    }
+    if (!LATITUDE || !LONGITUDE) {
+        return "Latitude or Longitude is missing. Please set NEXT_PUBLIC_LATITUDE and NEXT_PUBLIC_LONGITUDE in your environment variables.";
     }
     return null;
   }, []);
@@ -218,8 +241,8 @@ export default function Home() {
                 if (DISPLAY_MODE === 'portrait') return [6, 8].includes(orientation);
               }
               // Fallback to dimensions
-              const height = asset.exifInfo?.exifImageHeight;
               const width = asset.exifInfo?.exifImageWidth;
+              const height = asset.exifInfo?.exifImageHeight;
               if (width && height) {
                 if (DISPLAY_MODE === 'landscape') return width > height;
                 if (DISPLAY_MODE === 'portrait') return height > width;
@@ -331,6 +354,35 @@ export default function Home() {
     const clockInterval = setInterval(updateClock, 1000);
     return () => clearInterval(clockInterval);
   }, []);
+
+  // Weather
+  useEffect(() => {
+    if (!LATITUDE || !LONGITUDE) return;
+
+    const fetchWeather = async () => {
+        try {
+            const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,weathercode&timezone=auto`);
+            if (!weatherResponse.ok) throw new Error('Failed to fetch weather data.');
+            const data = await weatherResponse.json();
+            setWeather({
+                temperature: Math.round(data.current.temperature_2m),
+                weatherCode: data.current.weathercode,
+            });
+        } catch (e: any) {
+            console.error("Failed to fetch weather:", e);
+            toast({
+                variant: 'destructive',
+                title: 'Weather Update Failed',
+                description: e.message,
+            });
+        }
+    }
+    
+    fetchWeather();
+    const weatherInterval = setInterval(fetchWeather, WEATHER_REFRESH_INTERVAL);
+
+    return () => clearInterval(weatherInterval);
+  }, [toast]);
   
   // --- Render Logic ---
 
@@ -388,7 +440,6 @@ export default function Home() {
               aria-hidden="true"
               fill
               className="object-cover blur-2xl scale-110"
-              unoptimized
             />
             <div className="absolute inset-0 bg-black/50"></div>
             <Image
@@ -401,7 +452,6 @@ export default function Home() {
                  if (!isAVisible) setNextImageLoaded(true);
               }}
               priority
-              unoptimized
             />
           </>
         )}
@@ -418,7 +468,6 @@ export default function Home() {
               aria-hidden="true"
               fill
               className="object-cover blur-2xl scale-110"
-              unoptimized
             />
             <div className="absolute inset-0 bg-black/50"></div>
             <Image
@@ -431,7 +480,6 @@ export default function Home() {
                 if (isAVisible) setNextImageLoaded(true);
               }}
               priority
-              unoptimized
             />
           </>
         )}
@@ -446,6 +494,12 @@ export default function Home() {
           <div className="text-lg md:text-xl font-medium">
             {currentDate}
           </div>
+          {weather && (
+            <div className="flex items-center gap-2 text-lg md:text-xl font-medium pt-2">
+                <WeatherIcon code={weather.weatherCode} />
+                <span>{weather.temperature}°C</span>
+            </div>
+          )}
           <div className="w-full pt-2">
             <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white/80" />
           </div>
