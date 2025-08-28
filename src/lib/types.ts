@@ -19,6 +19,7 @@ export interface ImmichAsset {
     exifImageWidth?: number;
     exifImageHeight?: number;
     dateTimeOriginal?: string;
+    orientation?: number;
     [key: string]: any;
   }
 }

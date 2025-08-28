@@ -208,18 +208,23 @@ export default function Home() {
           if (IS_FAVORITE_ONLY) {
             fetchedAssets = fetchedAssets.filter(asset => asset.isFavorite);
           }
-
-          if (DISPLAY_MODE === 'portrait') {
+          
+          if (DISPLAY_MODE !== 'all') {
             fetchedAssets = fetchedAssets.filter(asset => {
+              const orientation = asset.exifInfo?.orientation;
+              // Prioritize orientation tag
+              if (orientation) {
+                if (DISPLAY_MODE === 'landscape') return orientation === 1;
+                if (DISPLAY_MODE === 'portrait') return [6, 8].includes(orientation);
+              }
+              // Fallback to dimensions
               const height = asset.exifInfo?.exifImageHeight;
               const width = asset.exifInfo?.exifImageWidth;
-              return !!(width && height && height > width);
-            });
-          } else if (DISPLAY_MODE === 'landscape') {
-            fetchedAssets = fetchedAssets.filter(asset => {
-              const height = asset.exifInfo?.exifImageHeight;
-              const width = asset.exifInfo?.exifImageWidth;
-              return !!(width && height && width > height);
+              if (width && height) {
+                if (DISPLAY_MODE === 'landscape') return width > height;
+                if (DISPLAY_MODE === 'portrait') return height > width;
+              }
+              return false;
             });
           }
           
@@ -475,5 +480,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
