@@ -496,8 +496,8 @@ export default function Home() {
 
       {/* Top Right: Weather */}
       {weather && weatherInfo && (
-        <div className="pointer-events-none absolute top-4 right-4 text-accent">
-            <div className="space-y-2 rounded-lg bg-black/10 p-4 backdrop-blur-md text-right">
+        <div className="pointer-events-none absolute top-4 right-4 text-white">
+            <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-md text-right">
                 <div className="flex items-center justify-end gap-3 text-2xl md:text-3xl font-medium">
                     <span>{weather.temperature}°C</span>
                     <weatherInfo.Icon size={32} className="shrink-0" />
