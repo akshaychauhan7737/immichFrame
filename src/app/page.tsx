@@ -377,6 +377,7 @@ export default function Home() {
               className="object-cover blur-2xl scale-110"
               unoptimized
             />
+            <div className="absolute inset-0 bg-black/50"></div>
             <Image
               key={imageA.id}
               src={imageA.url}
@@ -406,6 +407,7 @@ export default function Home() {
               className="object-cover blur-2xl scale-110"
               unoptimized
             />
+            <div className="absolute inset-0 bg-black/50"></div>
             <Image
               key={imageB.id}
               src={imageB.url}
