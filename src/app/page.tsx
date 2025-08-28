@@ -207,9 +207,11 @@ export default function Home() {
 
           if (DISPLAY_MODE === 'portrait' || DISPLAY_MODE === 'landscape') {
             fetchedAssets = fetchedAssets.filter(asset => {
-              const height = asset.exifInfo?.exifImageHeight ?? 0;
-              const width = asset.exifInfo?.exifImageWidth ?? 0;
-              if (height === 0 || width === 0) return false;
+              const height = asset.exifInfo?.exifImageHeight;
+              const width = asset.exifInfo?.exifImageWidth;
+              if (!width || !height || width <= 0 || height <= 0) {
+                return false;
+              }
               return DISPLAY_MODE === 'portrait' ? height > width : width > height;
             });
           }
