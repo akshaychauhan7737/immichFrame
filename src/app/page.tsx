@@ -491,11 +491,11 @@ export default function Home() {
           <div className="text-4xl font-semibold md:text-6xl">
             {currentTime}
           </div>
-          <div className="text-lg md:text-xl font-medium">
+          <div className="text-xl md:text-2xl font-medium">
             {currentDate}
           </div>
           {weather && (
-            <div className="flex items-center gap-2 text-lg md:text-xl font-medium pt-2">
+            <div className="flex items-center gap-2 text-xl md:text-2xl font-medium pt-2">
                 <WeatherIcon code={weather.weatherCode} />
                 <span>{weather.temperature}°C</span>
             </div>
@@ -508,7 +508,7 @@ export default function Home() {
         {/* Right Box: Photo Details */}
         {(currentAlbum || (currentAsset && isDateValid) || location) && (
           <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-md text-right">
-              <div className="flex flex-col items-end text-lg md:text-xl font-medium">
+              <div className="flex flex-col items-end text-xl md:text-2xl font-medium">
                   {currentAlbum && (
                       <div className="flex items-center gap-2">
                           <span>{currentAlbum.albumName}</span>
@@ -534,5 +534,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
