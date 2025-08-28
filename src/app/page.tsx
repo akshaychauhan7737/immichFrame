@@ -47,6 +47,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState('');
+  const [currentDate, setCurrentDate] = useState('');
   const [progress, setProgress] = useState(0);
 
   const [imageA, setImageA] = useState<{ url: string, id: string }>({ url: '', id: 'initialA' });
@@ -307,7 +308,9 @@ export default function Home() {
   // Clock
   useEffect(() => {
     const updateClock = () => {
-        setCurrentTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }));
+      const now = new Date();
+      setCurrentTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }));
+      setCurrentDate(now.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }));
     };
     updateClock();
     const clockInterval = setInterval(updateClock, 1000);
@@ -422,6 +425,9 @@ export default function Home() {
         <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-md">
           <div className="text-4xl font-semibold md:text-6xl">
             {currentTime}
+          </div>
+          <div className="text-lg md:text-xl font-medium">
+            {currentDate}
           </div>
           <div className="w-full pt-2">
             <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white/80" />
