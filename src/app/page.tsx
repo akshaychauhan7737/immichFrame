@@ -212,7 +212,13 @@ export default function Home() {
               if (!width || !height || width <= 0 || height <= 0) {
                 return false;
               }
-              return DISPLAY_MODE === 'portrait' ? height > width : width > height;
+              if (DISPLAY_MODE === 'portrait') {
+                  return height > width;
+              }
+              if (DISPLAY_MODE === 'landscape') {
+                  return width > height;
+              }
+              return false; // Should not happen
             });
           }
 
