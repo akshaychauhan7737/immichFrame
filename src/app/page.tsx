@@ -39,18 +39,25 @@ function shuffleArray<T>(array: T[]): T[] {
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-const WeatherIcon = ({ code }: { code: number }) => {
-    let Icon = Cloud;
-    // Simple mapping based on WMO Weather interpretation codes
-    if ([0, 1].includes(code)) Icon = Sun;
-    if ([2].includes(code)) Icon = CloudSun;
-    if ([3].includes(code)) Icon = Cloud;
-    if ([45, 48].includes(code)) Icon = Cloud; // Fog
-    if (code >= 51 && code <= 67) Icon = CloudRain; // Drizzle/Rain
-    if (code >= 71 && code <= 77) Icon = Snowflake; // Snow
-    if (code >= 80 && code <= 82) Icon = CloudRain; // Showers
-    if (code >= 95) Icon = Zap; // Thunderstorm
-    return <Icon size={24} className="shrink-0" />;
+const getWeatherInfo = (code: number): { Icon: React.ElementType, name: string } => {
+    // WMO Weather interpretation codes
+    if (code === 0) return { Icon: Sun, name: 'Clear sky' };
+    if (code === 1) return { Icon: Sun, name: 'Mainly clear' };
+    if (code === 2) return { Icon: CloudSun, name: 'Partly cloudy' };
+    if (code === 3) return { Icon: Cloud, name: 'Overcast' };
+    if (code === 45) return { Icon: Cloud, name: 'Fog' };
+    if (code === 48) return { Icon: Cloud, name: 'Depositing rime fog' };
+    if (code >= 51 && code <= 55) return { Icon: CloudRain, name: 'Drizzle' };
+    if (code >= 56 && code <= 57) return { Icon: CloudRain, name: 'Freezing Drizzle' };
+    if (code >= 61 && code <= 65) return { Icon: CloudRain, name: 'Rain' };
+    if (code >= 66 && code <= 67) return { Icon: CloudRain, name: 'Freezing Rain' };
+    if (code >= 71 && code <= 75) return { Icon: Snowflake, name: 'Snow fall' };
+    if (code === 77) return { Icon: Snowflake, name: 'Snow grains' };
+    if (code >= 80 && code <= 82) return { Icon: CloudRain, name: 'Rain showers' };
+    if (code >= 85 && code <= 86) return { Icon: Snowflake, name: 'Snow showers' };
+    if (code === 95) return { Icon: Zap, name: 'Thunderstorm' };
+    if (code >= 96 && code <= 99) return { Icon: Zap, name: 'Thunderstorm with hail' };
+    return { Icon: Cloud, name: 'Cloudy' };
 }
 
 
@@ -425,6 +432,8 @@ export default function Home() {
   const dateString = currentAsset?.exifInfo?.dateTimeOriginal;
   const photoDate = dateString ? new Date(dateString) : null;
   const isDateValid = photoDate && !isNaN(photoDate.getTime());
+  
+  const weatherInfo = weather ? getWeatherInfo(weather.weatherCode) : null;
 
 
   return (
@@ -485,6 +494,22 @@ export default function Home() {
         )}
       </div>
 
+      {/* Top Right: Weather */}
+      {weather && weatherInfo && (
+        <div className="pointer-events-none absolute top-4 right-4 text-white">
+            <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-md text-right">
+                <div className="flex items-center justify-end gap-3 text-2xl md:text-3xl font-medium">
+                    <span>{weather.temperature}°C</span>
+                    <weatherInfo.Icon size={32} className="shrink-0" />
+                </div>
+                <div className="text-xl md:text-2xl font-medium">
+                    {weatherInfo.name}
+                </div>
+            </div>
+        </div>
+      )}
+
+
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-4 md:p-6 text-white">
         {/* Left Box: Time and Progress */}
         <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-md">
@@ -494,12 +519,6 @@ export default function Home() {
           <div className="text-xl md:text-2xl font-medium">
             {currentDate}
           </div>
-          {weather && (
-            <div className="flex items-center gap-2 text-xl md:text-2xl font-medium pt-2">
-                <WeatherIcon code={weather.weatherCode} />
-                <span>{weather.temperature}°C</span>
-            </div>
-          )}
           <div className="w-full pt-2">
             <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white/80" />
           </div>
