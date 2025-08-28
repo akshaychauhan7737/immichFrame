@@ -14,7 +14,7 @@ import { format } from 'date-fns';
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
 const RETRY_DELAY = 5000; // 5 seconds
-const DISPLAY_MODE = process.env.NEXT_PUBLIC_DISPLAY_MODE || 'landscape'; // 'portrait', 'landscape', or 'all'
+const DISPLAY_MODE = process.env.NEXT_PUBLIC_DISPLAY_MODE; // 'portrait', 'landscape', or 'all'
 
 // We use a local proxy to avoid CORS issues.
 const PROXY_URL = '/api/immich';
@@ -59,13 +59,24 @@ export default function Home() {
   const albumPlaylist = useRef<ImmichAlbum[]>([]);
   const albumIndex = useRef(0);
 
-  const areConfigsMissing = useMemo(() => !SERVER_URL_CONFIGURED || !API_KEY, []);
+  const configError = useMemo(() => {
+    if (!SERVER_URL_CONFIGURED || !API_KEY) {
+      return "Server URL or API Key is missing. Please check your environment variables.";
+    }
+    if (!DISPLAY_MODE) {
+      return "The NEXT_PUBLIC_DISPLAY_MODE environment variable is not set. Please set it to 'portrait', 'landscape', or 'all'.";
+    }
+    if (!['portrait', 'landscape', 'all'].includes(DISPLAY_MODE)) {
+      return `Invalid value for NEXT_PUBLIC_DISPLAY_MODE. It must be one of 'portrait', 'landscape', or 'all'. Found: ${DISPLAY_MODE}`;
+    }
+    return null;
+  }, []);
   
   const currentAsset = useMemo(() => currentAssets[assetIndex], [currentAssets, assetIndex]);
 
   // --- Image Fetching Logic ---
   const getImageUrl = useCallback(async (assetId: string): Promise<string | null> => {
-    if (areConfigsMissing) return null;
+    if (configError) return null;
     try {
       const res = await fetch(`${PROXY_URL}/assets/${assetId}/thumbnail?size=preview`, {
         method: 'GET',
@@ -85,7 +96,7 @@ export default function Home() {
         });
         return null;
     }
-  }, [areConfigsMissing, toast]);
+  }, [configError, toast]);
   
   const getImageWithRetry = useCallback(async (assetId: string, retries = 1): Promise<string | null> => {
       let url = await getImageUrl(assetId);
@@ -114,17 +125,9 @@ export default function Home() {
 
   const loadNextAsset = useCallback(async () => {
     let nextAssetIndex = (assetIndex + 1);
-    let nextAlbumIndex = albumIndex.current;
     
     // If we've reached the end of the current album's assets
     if (nextAssetIndex >= currentAssets.length) {
-      nextAssetIndex = 0;
-      nextAlbumIndex = (albumIndex.current + 1);
-      if (nextAlbumIndex >= albumPlaylist.current.length) {
-          nextAlbumIndex = 0; // Loop back to the start of the playlist
-      }
-      // This will trigger the useEffect to load a new album
-      albumIndex.current = nextAlbumIndex; 
       // Setting current assets to empty will show loader and trigger album load effect
       setCurrentAssets([]); 
       return;
@@ -153,8 +156,8 @@ export default function Home() {
 
   // Main logic to find and load a suitable album with assets
   useEffect(() => {
-    if (areConfigsMissing) {
-      setError("Server URL or API Key is missing. Please check your environment variables.");
+    if (configError) {
+      setError(configError);
       setIsLoading(false);
       return;
     }
@@ -178,6 +181,7 @@ export default function Home() {
             return;
           }
           albumPlaylist.current = shuffleArray(allAlbums);
+          albumIndex.current = 0; // Start from the beginning of the shuffled list
         } catch (e: any) {
           setError(`Failed to connect to Immich server: ${e.message}`);
           setIsLoading(false);
@@ -205,22 +209,22 @@ export default function Home() {
             fetchedAssets = fetchedAssets.filter(asset => asset.isFavorite);
           }
 
-          if (DISPLAY_MODE === 'portrait' || DISPLAY_MODE === 'landscape') {
+          if (DISPLAY_MODE === 'portrait') {
             fetchedAssets = fetchedAssets.filter(asset => {
               const height = asset.exifInfo?.exifImageHeight;
               const width = asset.exifInfo?.exifImageWidth;
-              if (!width || !height || width <= 0 || height <= 0) {
-                return false;
-              }
-              if (DISPLAY_MODE === 'portrait') {
-                  return height > width;
-              }
-              if (DISPLAY_MODE === 'landscape') {
-                  return width > height;
-              }
-              return false; // Should not happen
+              return !!(width && height && height > width);
+            });
+          } else if (DISPLAY_MODE === 'landscape') {
+            fetchedAssets = fetchedAssets.filter(asset => {
+              const height = asset.exifInfo?.exifImageHeight;
+              const width = asset.exifInfo?.exifImageWidth;
+              return !!(width && height && width > height);
             });
           }
+          
+          // Move to the next album index for the next cycle
+          albumIndex.current = (albumIndex.current + 1) % albumPlaylist.current.length;
 
           if (fetchedAssets.length > 0) {
             const shuffledAssets = shuffleArray(fetchedAssets);
@@ -238,11 +242,9 @@ export default function Home() {
             }
             foundSuitableAlbum = true;
           } else {
-             // Move to the next album
-            albumIndex.current = (albumIndex.current + 1) % albumPlaylist.current.length;
-            // If we've looped through all albums and found nothing
+             // If we've looped through all albums and found nothing
             if (albumIndex.current === initialAlbumIndex) {
-              setError(`No photos matching the '${DISPLAY_MODE}' orientation filter could be found in any of your ${albumPlaylist.current.length} albums.`);
+              setError(`No photos matching your filters (display_mode: ${DISPLAY_MODE}, favorites_only: ${IS_FAVORITE_ONLY}) could be found in any of your ${albumPlaylist.current.length} albums.`);
               setIsLoading(false);
               return;
             }
@@ -263,11 +265,11 @@ export default function Home() {
 
     // This effect should only run when we need to load a new album,
     // which is on startup or when currentAssets becomes empty.
-    if(currentAssets.length === 0 && !areConfigsMissing) {
+    if(currentAssets.length === 0 && !configError) {
         findAndLoadAlbum();
     }
 
-  }, [areConfigsMissing, getImageWithRetry, currentAssets.length]);
+  }, [configError, getImageWithRetry, currentAssets.length]);
 
   // Image rotation timer
   useEffect(() => {
@@ -341,7 +343,7 @@ export default function Home() {
       <div className="flex h-screen w-screen items-center justify-center bg-background p-8">
         <Alert variant="destructive" className="max-w-lg">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
+          <AlertTitle>Configuration Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>
@@ -473,3 +475,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
