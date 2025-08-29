@@ -97,10 +97,7 @@ export default function Home() {
     if (!SERVER_URL_CONFIGURED || !API_KEY) {
       return "Server URL or API Key is missing. Please check your environment variables.";
     }
-    if (!DISPLAY_MODE) {
-      return "The NEXT_PUBLIC_DISPLAY_MODE environment variable is not set. Please set it to 'portrait', 'landscape', or 'all'.";
-    }
-    if (!['portrait', 'landscape', 'all'].includes(DISPLAY_MODE)) {
+    if (DISPLAY_MODE && !['portrait', 'landscape', 'all'].includes(DISPLAY_MODE)) {
       return `Invalid value for NEXT_PUBLIC_DISPLAY_MODE. It must be one of 'portrait', 'landscape', or 'all'. Found: ${DISPLAY_MODE}`;
     }
     return null;
@@ -243,20 +240,21 @@ export default function Home() {
             fetchedAssets = fetchedAssets.filter(asset => asset.isFavorite);
           }
           
-          if (DISPLAY_MODE !== 'all') {
+          const currentDisplayMode = DISPLAY_MODE || 'all';
+          if (currentDisplayMode !== 'all') {
             fetchedAssets = fetchedAssets.filter(asset => {
               const orientation = asset.exifInfo?.orientation;
               // Prioritize orientation tag
               if (orientation) {
-                if (DISPLAY_MODE === 'landscape') return orientation === 1;
-                if (DISPLAY_MODE === 'portrait') return [6, 8].includes(orientation);
+                if (currentDisplayMode === 'landscape') return orientation === 1;
+                if (currentDisplayMode === 'portrait') return [6, 8].includes(orientation);
               }
               // Fallback to dimensions
               const width = asset.exifInfo?.exifImageWidth;
               const height = asset.exifInfo?.exifImageHeight;
               if (width && height && width > 0 && height > 0) {
-                  if (DISPLAY_MODE === 'landscape') return width > height;
-                  if (DISPLAY_MODE === 'portrait') return height > width;
+                  if (currentDisplayMode === 'landscape') return width > height;
+                  if (currentDisplayMode === 'portrait') return height > width;
               }
               return false;
             });
@@ -552,27 +550,27 @@ export default function Home() {
 
       {/* Top Right: Weather */}
       {weather && weatherInfo && (
-        <div className="pointer-events-none absolute top-4 right-4 text-white">
-            <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-md text-right">
-                <div className="flex items-center justify-end gap-3 text-2xl md:text-3xl font-medium">
-                    <span>{weather.temperature}°C</span>
-                    <weatherInfo.Icon size={32} className="shrink-0" />
-                </div>
-                <div className="text-xl md:text-2xl font-medium">
-                    {weatherInfo.name}
-                </div>
-                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-base text-white/80 pt-2">
-                    <div className="flex items-center justify-end gap-2">
-                        <span>{weather.windSpeed} m/s</span>
-                        <Wind size={16} />
-                    </div>
-                    <div className="flex items-center justify-end gap-2">
-                        <span>{weather.humidity}%</span>
-                        <Droplets size={16} />
-                    </div>
-                </div>
-            </div>
-        </div>
+          <div className="pointer-events-none absolute top-4 right-4 text-white">
+              <div className="space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-md text-right">
+                  <div className="flex items-center justify-end gap-2">
+                      <span className="text-4xl md:text-5xl font-bold">{weather.temperature}°C</span>
+                      <weatherInfo.Icon size={40} className="shrink-0" />
+                  </div>
+                  <div className="text-lg font-medium">
+                      {weatherInfo.name}
+                  </div>
+                  <div className="flex justify-end gap-x-3 text-sm text-white/80 pt-1">
+                      <div className="flex items-center gap-1.5">
+                          <span>{weather.windSpeed} m/s</span>
+                          <Wind size={14} />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                          <span>{weather.humidity}%</span>
+                          <Droplets size={14} />
+                      </div>
+                  </div>
+              </div>
+          </div>
       )}
 
 
