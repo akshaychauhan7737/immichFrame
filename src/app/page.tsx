@@ -560,7 +560,7 @@ export default function Home() {
                   <div className="text-base font-medium text-white/90 capitalize">
                       {weather.description}
                   </div>
-                  <div className="flex justify-end gap-x-4 text-sm text-white/80 pt-1">
+                   <div className="flex flex-col items-end text-sm text-white/80 pt-1">
                       <div className="flex items-center gap-1.5">
                           <Thermometer size={16} />
                           <span>Feels like {weather.feelsLike}°</span>
@@ -622,3 +622,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
