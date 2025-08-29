@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, AlertTriangle, MapPin, Calendar, Folder, Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind, Droplets } from 'lucide-react';
+import { Loader2, AlertTriangle, MapPin, Calendar, Folder, Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind, Droplets, Thermometer } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -374,6 +374,7 @@ export default function Home() {
             const data = await weatherResponse.json();
             setWeather({
                 temperature: Math.round(data.main.temp),
+                feelsLike: Math.round(data.main.feels_like),
                 weatherCode: data.weather[0].id,
                 description: data.weather[0].description,
                 windSpeed: Math.round(data.wind.speed * 3.6),
@@ -561,12 +562,16 @@ export default function Home() {
                   </div>
                   <div className="flex justify-end gap-x-4 text-sm text-white/80 pt-1">
                       <div className="flex items-center gap-1.5">
-                          <span>{weather.windSpeed} km/h</span>
-                          <Wind size={16} />
+                          <Thermometer size={16} />
+                          <span>Feels like {weather.feelsLike}°</span>
                       </div>
                       <div className="flex items-center gap-1.5">
+                          <Wind size={16} />
+                          <span>{weather.windSpeed} km/h</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                           <Droplets size={16} />
                           <span>{weather.humidity}%</span>
-                          <Droplets size={16} />
                       </div>
                   </div>
               </div>

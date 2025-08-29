@@ -58,6 +58,7 @@ export interface AirPollutionData {
 
 export interface WeatherData {
   temperature: number;
+  feelsLike: number;
   weatherCode: number;
   description: string;
   windSpeed: number;
