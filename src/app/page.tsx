@@ -15,7 +15,7 @@ import { format } from 'date-fns';
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
 const RETRY_DELAY = 5000; // 5 seconds
 const WEATHER_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const AIR_POLLUTION_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
+const AIR_POLLUTION_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 // --- Environment Variable-based Configuration ---
 const DISPLAY_MODE = process.env.NEXT_PUBLIC_DISPLAY_MODE; // 'portrait', 'landscape', or 'all'
@@ -615,5 +615,7 @@ export default function Home() {
     </main>
   );
 }
+
+    
 
     
