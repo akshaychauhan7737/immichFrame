@@ -585,7 +585,7 @@ export default function Home() {
           <div className="text-5xl font-semibold md:text-7xl">
             {currentTime}
           </div>
-          <div className="text-lg md:text-xl font-medium text-white/90">
+          <div className="text-2xl md:text-3xl font-medium text-white/90">
             {currentDate}
           </div>
           <div className="w-full pt-2">
