@@ -97,10 +97,7 @@ export default function Home() {
     if (!SERVER_URL_CONFIGURED || !API_KEY) {
       return "Server URL or API Key is missing. Please check your environment variables.";
     }
-    if (!DISPLAY_MODE) {
-      return "NEXT_PUBLIC_DISPLAY_MODE is not set. It must be one of 'portrait', 'landscape', or 'all'.";
-    }
-    if (!['portrait', 'landscape', 'all'].includes(DISPLAY_MODE)) {
+    if (DISPLAY_MODE && !['portrait', 'landscape', 'all'].includes(DISPLAY_MODE)) {
       return `Invalid value for NEXT_PUBLIC_DISPLAY_MODE. It must be one of 'portrait', 'landscape', or 'all'. Found: ${DISPLAY_MODE}`;
     }
     return null;
@@ -243,7 +240,7 @@ export default function Home() {
             fetchedAssets = fetchedAssets.filter(asset => asset.isFavorite);
           }
           
-          if (DISPLAY_MODE !== 'all') {
+          if (DISPLAY_MODE && DISPLAY_MODE !== 'all') {
             fetchedAssets = fetchedAssets.filter(asset => {
               const orientation = asset.exifInfo?.orientation;
               // Prioritize orientation tag
@@ -378,6 +375,7 @@ export default function Home() {
             setWeather({
                 temperature: Math.round(data.main.temp),
                 weatherCode: data.weather[0].id,
+                description: data.weather[0].description,
                 windSpeed: Math.round(data.wind.speed * 3.6),
                 humidity: data.main.humidity,
             });
@@ -558,8 +556,8 @@ export default function Home() {
                       <span className="text-5xl font-bold">{weather.temperature}°</span>
                       <weatherInfo.Icon size={48} className="shrink-0" />
                   </div>
-                  <div className="text-base font-medium text-white/90">
-                      {weatherInfo.name}
+                  <div className="text-base font-medium text-white/90 capitalize">
+                      {weather.description}
                   </div>
                   <div className="flex justify-end gap-x-4 text-sm text-white/80 pt-1">
                       <div className="flex items-center gap-1.5">
@@ -619,5 +617,3 @@ export default function Home() {
     </main>
   );
 }
-
-    

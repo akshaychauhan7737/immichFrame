@@ -59,6 +59,7 @@ export interface AirPollutionData {
 export interface WeatherData {
   temperature: number;
   weatherCode: number;
+  description: string;
   windSpeed: number;
   humidity: number;
 }
