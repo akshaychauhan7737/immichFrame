@@ -97,7 +97,10 @@ export default function Home() {
     if (!SERVER_URL_CONFIGURED || !API_KEY) {
       return "Server URL or API Key is missing. Please check your environment variables.";
     }
-    if (DISPLAY_MODE && !['portrait', 'landscape', 'all'].includes(DISPLAY_MODE)) {
+    if (!DISPLAY_MODE) {
+      return "NEXT_PUBLIC_DISPLAY_MODE is not set. It must be one of 'portrait', 'landscape', or 'all'.";
+    }
+    if (!['portrait', 'landscape', 'all'].includes(DISPLAY_MODE)) {
       return `Invalid value for NEXT_PUBLIC_DISPLAY_MODE. It must be one of 'portrait', 'landscape', or 'all'. Found: ${DISPLAY_MODE}`;
     }
     return null;
@@ -240,21 +243,20 @@ export default function Home() {
             fetchedAssets = fetchedAssets.filter(asset => asset.isFavorite);
           }
           
-          const currentDisplayMode = DISPLAY_MODE || 'all';
-          if (currentDisplayMode !== 'all') {
+          if (DISPLAY_MODE !== 'all') {
             fetchedAssets = fetchedAssets.filter(asset => {
               const orientation = asset.exifInfo?.orientation;
               // Prioritize orientation tag
               if (orientation) {
-                if (currentDisplayMode === 'landscape') return orientation === 1;
-                if (currentDisplayMode === 'portrait') return [6, 8].includes(orientation);
+                if (DISPLAY_MODE === 'landscape') return orientation === 1;
+                if (DISPLAY_MODE === 'portrait') return [6, 8].includes(orientation);
               }
               // Fallback to dimensions
               const width = asset.exifInfo?.exifImageWidth;
               const height = asset.exifInfo?.exifImageHeight;
               if (width && height && width > 0 && height > 0) {
-                  if (currentDisplayMode === 'landscape') return width > height;
-                  if (currentDisplayMode === 'portrait') return height > width;
+                  if (DISPLAY_MODE === 'landscape') return width > height;
+                  if (DISPLAY_MODE === 'portrait') return height > width;
               }
               return false;
             });
@@ -530,7 +532,7 @@ export default function Home() {
       {/* Top Left: Air Pollution */}
       {airPollution && aqiInfo && (
         <div className="pointer-events-none absolute top-4 left-4 text-white">
-            <div className="space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-md text-left">
+            <div className="space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm text-left">
                 <div className="flex items-center gap-3">
                     <Wind size={28} />
                     <div className='flex items-baseline gap-2'>
@@ -551,12 +553,12 @@ export default function Home() {
       {/* Top Right: Weather */}
       {weather && weatherInfo && (
           <div className="pointer-events-none absolute top-4 right-4 text-white">
-              <div className="space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-md text-right">
+              <div className="space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm text-right">
                   <div className="flex items-center justify-end gap-2">
                       <span className="text-4xl md:text-5xl font-bold">{weather.temperature}°C</span>
                       <weatherInfo.Icon size={40} className="shrink-0" />
                   </div>
-                  <div className="text-lg font-medium">
+                  <div className="text-lg font-medium text-white/90">
                       {weatherInfo.name}
                   </div>
                   <div className="flex justify-end gap-x-3 text-sm text-white/80 pt-1">
@@ -576,38 +578,38 @@ export default function Home() {
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-4 md:p-6 text-white">
         {/* Left Box: Time and Progress */}
-        <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-md">
+        <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-sm">
           <div className="text-4xl font-semibold md:text-6xl">
             {currentTime}
           </div>
-          <div className="text-xl md:text-2xl font-medium">
+          <div className="text-xl md:text-2xl font-medium text-white/90">
             {currentDate}
           </div>
           <div className="w-full pt-2">
-            <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white/80" />
+            <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white" />
           </div>
         </div>
 
         {/* Right Box: Photo Details */}
         {(currentAlbum || (currentAsset && isDateValid) || location) && (
-          <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-md text-right">
-              <div className="flex flex-col items-end text-xl md:text-2xl font-medium">
+          <div className="space-y-1.5 rounded-lg bg-black/30 p-4 backdrop-blur-sm text-right">
+              <div className="flex flex-col items-end text-lg md:text-xl font-medium">
                   {currentAlbum && (
                       <div className="flex items-center gap-2">
                           <span>{currentAlbum.albumName}</span>
-                          <Folder size={20} className="shrink-0" />
+                          <Folder size={18} className="shrink-0" />
                       </div>
                   )}
                   {isDateValid && photoDate && (
-                       <div className="flex items-center gap-2">
+                       <div className="flex items-center gap-2 text-white/90">
                            <span>{format(photoDate, 'MMMM d, yyyy')}</span>
-                          <Calendar size={20} className="shrink-0" />
+                          <Calendar size={18} className="shrink-0" />
                       </div>
                   )}
                   {location && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 text-white/90">
                           <span>{location}</span>
-                          <MapPin size={20} className="shrink-0" />
+                          <MapPin size={18} className="shrink-0" />
                       </div>
                   )}
               </div>
