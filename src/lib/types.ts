@@ -55,3 +55,10 @@ export interface AirPollutionData {
     };
     dt: number;
 }
+
+export interface WeatherData {
+  temperature: number;
+  weatherCode: number;
+  windSpeed: number;
+  humidity: number;
+}

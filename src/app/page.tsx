@@ -1,12 +1,12 @@
 
 "use client";
 
-import type { ImmichAlbum, ImmichAsset, AirPollutionData } from '@/lib/types';
+import type { ImmichAlbum, ImmichAsset, AirPollutionData, WeatherData } from '@/lib/types';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, AlertTriangle, MapPin, Calendar, Folder, Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind } from 'lucide-react';
+import { Loader2, AlertTriangle, MapPin, Calendar, Folder, Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind, Droplets } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -43,23 +43,15 @@ function shuffleArray<T>(array: T[]): T[] {
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 const getWeatherInfo = (code: number): { Icon: React.ElementType, name: string } => {
-    // WMO Weather interpretation codes
-    if (code === 0) return { Icon: Sun, name: 'Clear sky' };
-    if (code === 1) return { Icon: Sun, name: 'Mainly clear' };
-    if (code === 2) return { Icon: CloudSun, name: 'Partly cloudy' };
-    if (code === 3) return { Icon: Cloud, name: 'Overcast' };
-    if (code === 45) return { Icon: Cloud, name: 'Fog' };
-    if (code === 48) return { Icon: Cloud, name: 'Depositing rime fog' };
-    if (code >= 51 && code <= 55) return { Icon: CloudRain, name: 'Drizzle' };
-    if (code >= 56 && code <= 57) return { Icon: CloudRain, name: 'Freezing Drizzle' };
-    if (code >= 61 && code <= 65) return { Icon: CloudRain, name: 'Rain' };
-    if (code >= 66 && code <= 67) return { Icon: CloudRain, name: 'Freezing Rain' };
-    if (code >= 71 && code <= 75) return { Icon: Snowflake, name: 'Snow fall' };
-    if (code === 77) return { Icon: Snowflake, name: 'Snow grains' };
-    if (code >= 80 && code <= 82) return { Icon: CloudRain, name: 'Rain showers' };
-    if (code >= 85 && code <= 86) return { Icon: Snowflake, name: 'Snow showers' };
-    if (code === 95) return { Icon: Zap, name: 'Thunderstorm' };
-    if (code >= 96 && code <= 99) return { Icon: Zap, name: 'Thunderstorm with hail' };
+    // OpenWeatherMap Weather condition codes
+    if (code >= 200 && code < 300) return { Icon: Zap, name: 'Thunderstorm' };
+    if (code >= 300 && code < 400) return { Icon: CloudRain, name: 'Drizzle' };
+    if (code >= 500 && code < 600) return { Icon: CloudRain, name: 'Rain' };
+    if (code >= 600 && code < 700) return { Icon: Snowflake, name: 'Snow' };
+    if (code >= 700 && code < 800) return { Icon: Cloud, name: 'Atmosphere' };
+    if (code === 800) return { Icon: Sun, name: 'Clear' };
+    if (code === 801) return { Icon: CloudSun, name: 'Few clouds' };
+    if (code > 801 && code < 805) return { Icon: Cloud, name: 'Clouds' };
     return { Icon: Cloud, name: 'Cloudy' };
 }
 
@@ -88,7 +80,7 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState('');
   const [currentDate, setCurrentDate] = useState('');
   const [progress, setProgress] = useState(0);
-  const [weather, setWeather] = useState<{ temperature: number; weatherCode: number; } | null>(null);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
   const [airPollution, setAirPollution] = useState<AirPollutionData | null>(null);
 
 
@@ -262,9 +254,9 @@ export default function Home() {
               // Fallback to dimensions
               const width = asset.exifInfo?.exifImageWidth;
               const height = asset.exifInfo?.exifImageHeight;
-              if (width && height) {
-                if (DISPLAY_MODE === 'landscape') return width > height;
-                if (DISPLAY_MODE === 'portrait') return height > width;
+              if (width && height && width > 0 && height > 0) {
+                  if (DISPLAY_MODE === 'landscape') return width > height;
+                  if (DISPLAY_MODE === 'portrait') return height > width;
               }
               return false;
             });
@@ -376,16 +368,18 @@ export default function Home() {
 
   // Weather
   useEffect(() => {
-    if (!LATITUDE || !LONGITUDE) return;
+    if (!LATITUDE || !LONGITUDE || !OPENWEATHER_API_KEY) return;
 
     const fetchWeather = async () => {
         try {
-            const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${LATITUDE}&longitude=${LONGITUDE}&current=temperature_2m,weathercode&timezone=auto`);
+            const weatherResponse = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${LATITUDE}&lon=${LONGITUDE}&appid=${OPENWEATHER_API_KEY}&units=metric`);
             if (!weatherResponse.ok) throw new Error('Failed to fetch weather data.');
             const data = await weatherResponse.json();
             setWeather({
-                temperature: Math.round(data.current.temperature_2m),
-                weatherCode: data.current.weathercode,
+                temperature: Math.round(data.main.temp),
+                weatherCode: data.weather[0].id,
+                windSpeed: data.wind.speed,
+                humidity: data.main.humidity,
             });
         } catch (e: any) {
             console.error("Failed to fetch weather:", e);
@@ -567,6 +561,16 @@ export default function Home() {
                 <div className="text-xl md:text-2xl font-medium">
                     {weatherInfo.name}
                 </div>
+                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-base text-white/80 pt-2">
+                    <div className="flex items-center justify-end gap-2">
+                        <span>{weather.windSpeed} m/s</span>
+                        <Wind size={16} />
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                        <span>{weather.humidity}%</span>
+                        <Droplets size={16} />
+                    </div>
+                </div>
             </div>
         </div>
       )}
@@ -615,7 +619,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
-
-    
