@@ -1,12 +1,12 @@
 
 "use client";
 
-import type { ImmichAlbum, ImmichAsset } from '@/lib/types';
+import type { ImmichAlbum, ImmichAsset, AirPollutionData } from '@/lib/types';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, AlertTriangle, MapPin, Calendar, Folder, Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap } from 'lucide-react';
+import { Loader2, AlertTriangle, MapPin, Calendar, Folder, Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -15,6 +15,7 @@ import { format } from 'date-fns';
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
 const RETRY_DELAY = 5000; // 5 seconds
 const WEATHER_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const AIR_POLLUTION_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
 
 // --- Environment Variable-based Configuration ---
 const DISPLAY_MODE = process.env.NEXT_PUBLIC_DISPLAY_MODE; // 'portrait', 'landscape', or 'all'
@@ -23,6 +24,8 @@ const API_KEY = process.env.NEXT_PUBLIC_IMMICH_API_KEY;
 const IS_FAVORITE_ONLY = process.env.NEXT_PUBLIC_IMMICH_IS_FAVORITE_ONLY === 'true';
 const LATITUDE = process.env.NEXT_PUBLIC_LATITUDE;
 const LONGITUDE = process.env.NEXT_PUBLIC_LONGITUDE;
+const OPENWEATHER_API_KEY = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
+
 
 // We use a local proxy to avoid CORS issues for Immich.
 const PROXY_URL = '/api/immich';
@@ -60,6 +63,17 @@ const getWeatherInfo = (code: number): { Icon: React.ElementType, name: string }
     return { Icon: Cloud, name: 'Cloudy' };
 }
 
+const getAqiInfo = (aqi: number): { label: string; color: string } => {
+    switch (aqi) {
+        case 1: return { label: 'Good', color: 'text-green-400' };
+        case 2: return { label: 'Fair', color: 'text-yellow-400' };
+        case 3: return { label: 'Moderate', color: 'text-orange-400' };
+        case 4: return { label: 'Poor', color: 'text-red-500' };
+        case 5: return { label: 'Very Poor', color: 'text-purple-500' };
+        default: return { label: 'Unknown', color: 'text-white' };
+    }
+}
+
 
 export default function Home() {
   const { toast } = useToast();
@@ -75,6 +89,7 @@ export default function Home() {
   const [currentDate, setCurrentDate] = useState('');
   const [progress, setProgress] = useState(0);
   const [weather, setWeather] = useState<{ temperature: number; weatherCode: number; } | null>(null);
+  const [airPollution, setAirPollution] = useState<AirPollutionData | null>(null);
 
 
   const [imageA, setImageA] = useState<{ url: string, id: string }>({ url: '', id: 'initialA' });
@@ -98,6 +113,9 @@ export default function Home() {
     }
     if (!LATITUDE || !LONGITUDE) {
         return "Latitude or Longitude is missing. Please set NEXT_PUBLIC_LATITUDE and NEXT_PUBLIC_LONGITUDE in your environment variables.";
+    }
+    if (!OPENWEATHER_API_KEY) {
+        return "OpenWeather API Key is missing. Please set NEXT_PUBLIC_OPENWEATHER_API_KEY in your environment variables.";
     }
     return null;
   }, []);
@@ -390,6 +408,34 @@ export default function Home() {
 
     return () => clearInterval(weatherInterval);
   }, [toast]);
+
+  // Air Pollution
+  useEffect(() => {
+    if (!LATITUDE || !LONGITUDE || !OPENWEATHER_API_KEY) return;
+
+    const fetchAirPollution = async () => {
+        try {
+            const response = await fetch(`https://api.openweathermap.org/data/2.5/air_pollution?lat=${LATITUDE}&lon=${LONGITUDE}&appid=${OPENWEATHER_API_KEY}`);
+            if (!response.ok) throw new Error('Failed to fetch air pollution data.');
+            const data = await response.json();
+            if (data.list && data.list.length > 0) {
+                setAirPollution(data.list[0]);
+            }
+        } catch (e: any) {
+            console.error("Failed to fetch air pollution:", e);
+            toast({
+                variant: 'destructive',
+                title: 'Air Pollution Update Failed',
+                description: e.message,
+            });
+        }
+    };
+
+    fetchAirPollution();
+    const interval = setInterval(fetchAirPollution, AIR_POLLUTION_REFRESH_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [toast]);
   
   // --- Render Logic ---
 
@@ -434,6 +480,7 @@ export default function Home() {
   const isDateValid = photoDate && !isNaN(photoDate.getTime());
   
   const weatherInfo = weather ? getWeatherInfo(weather.weatherCode) : null;
+  const aqiInfo = airPollution ? getAqiInfo(airPollution.main.aqi) : null;
 
 
   return (
@@ -493,6 +540,27 @@ export default function Home() {
           </>
         )}
       </div>
+
+      {/* Top Left: Air Pollution */}
+      {airPollution && aqiInfo && (
+        <div className="pointer-events-none absolute top-4 left-4 text-white">
+            <div className="space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-md text-left">
+                <div className="flex items-center gap-3">
+                    <Wind size={28} />
+                    <div className='flex items-baseline gap-2'>
+                        <span className="text-3xl font-bold">{airPollution.main.aqi}</span>
+                        <span className={cn("text-xl font-medium", aqiInfo.color)}>{aqiInfo.label}</span>
+                    </div>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-sm text-white/80 pt-1">
+                    <span>PM2.5: {airPollution.components.pm2_5.toFixed(1)}</span>
+                    <span>PM10: {airPollution.components.pm10.toFixed(1)}</span>
+                    <span>SO₂: {airPollution.components.so2.toFixed(1)}</span>
+                    <span>NO₂: {airPollution.components.no2.toFixed(1)}</span>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* Top Right: Weather */}
       {weather && weatherInfo && (
