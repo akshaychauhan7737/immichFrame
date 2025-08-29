@@ -565,13 +565,15 @@ export default function Home() {
                           <Thermometer size={16} />
                           <span>Feels like {weather.feelsLike}°</span>
                       </div>
-                      <div className="flex items-center gap-1.5">
-                          <Wind size={16} />
-                          <span>{weather.windSpeed} km/h</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                           <Droplets size={16} />
-                          <span>{weather.humidity}%</span>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
+                            <Wind size={16} />
+                            <span>{weather.windSpeed} km/h</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <Droplets size={16} />
+                            <span>{weather.humidity}%</span>
+                        </div>
                       </div>
                   </div>
               </div>
@@ -622,5 +624,7 @@ export default function Home() {
     </main>
   );
 }
+
+    
 
     
