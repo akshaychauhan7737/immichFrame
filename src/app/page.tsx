@@ -111,12 +111,6 @@ export default function Home() {
     if (!['portrait', 'landscape', 'all'].includes(DISPLAY_MODE)) {
       return `Invalid value for NEXT_PUBLIC_DISPLAY_MODE. It must be one of 'portrait', 'landscape', or 'all'. Found: ${DISPLAY_MODE}`;
     }
-    if (!LATITUDE || !LONGITUDE) {
-        return "Latitude or Longitude is missing. Please set NEXT_PUBLIC_LATITUDE and NEXT_PUBLIC_LONGITUDE in your environment variables.";
-    }
-    if (!OPENWEATHER_API_KEY) {
-        return "OpenWeather API Key is missing. Please set NEXT_PUBLIC_OPENWEATHER_API_KEY in your environment variables.";
-    }
     return null;
   }, []);
   
@@ -621,3 +615,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
