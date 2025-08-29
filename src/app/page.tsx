@@ -378,7 +378,7 @@ export default function Home() {
             setWeather({
                 temperature: Math.round(data.main.temp),
                 weatherCode: data.weather[0].id,
-                windSpeed: data.wind.speed,
+                windSpeed: Math.round(data.wind.speed * 3.6),
                 humidity: data.main.humidity,
             });
         } catch (e: any) {
@@ -534,17 +534,17 @@ export default function Home() {
         <div className="pointer-events-none absolute top-4 left-4 text-white">
             <div className="space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm text-left">
                 <div className="flex items-center gap-3">
-                    <Wind size={28} />
+                    <Wind size={32} />
                     <div className='flex items-baseline gap-2'>
-                        <span className="text-3xl font-bold">{airPollution.main.aqi}</span>
-                        <span className={cn("text-xl font-medium", aqiInfo.color)}>{aqiInfo.label}</span>
+                        <span className="text-4xl font-bold">{airPollution.main.aqi}</span>
+                        <span className={cn("text-2xl font-medium", aqiInfo.color)}>{aqiInfo.label}</span>
                     </div>
                 </div>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-sm text-white/80 pt-1">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm text-white/80 pt-1">
                     <span>PM2.5: {airPollution.components.pm2_5.toFixed(1)}</span>
+                    <span>NO₂: {airPollution.components.no2.toFixed(1)}</span>
                     <span>PM10: {airPollution.components.pm10.toFixed(1)}</span>
                     <span>SO₂: {airPollution.components.so2.toFixed(1)}</span>
-                    <span>NO₂: {airPollution.components.no2.toFixed(1)}</span>
                 </div>
             </div>
         </div>
@@ -555,20 +555,20 @@ export default function Home() {
           <div className="pointer-events-none absolute top-4 right-4 text-white">
               <div className="space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm text-right">
                   <div className="flex items-center justify-end gap-2">
-                      <span className="text-4xl md:text-5xl font-bold">{weather.temperature}°C</span>
-                      <weatherInfo.Icon size={40} className="shrink-0" />
+                      <span className="text-5xl font-bold">{weather.temperature}°</span>
+                      <weatherInfo.Icon size={48} className="shrink-0" />
                   </div>
-                  <div className="text-lg font-medium text-white/90">
+                  <div className="text-base font-medium text-white/90">
                       {weatherInfo.name}
                   </div>
-                  <div className="flex justify-end gap-x-3 text-sm text-white/80 pt-1">
+                  <div className="flex justify-end gap-x-4 text-sm text-white/80 pt-1">
                       <div className="flex items-center gap-1.5">
-                          <span>{weather.windSpeed} m/s</span>
-                          <Wind size={14} />
+                          <span>{weather.windSpeed} km/h</span>
+                          <Wind size={16} />
                       </div>
                       <div className="flex items-center gap-1.5">
                           <span>{weather.humidity}%</span>
-                          <Droplets size={14} />
+                          <Droplets size={16} />
                       </div>
                   </div>
               </div>
@@ -579,10 +579,10 @@ export default function Home() {
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-4 md:p-6 text-white">
         {/* Left Box: Time and Progress */}
         <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-sm">
-          <div className="text-4xl font-semibold md:text-6xl">
+          <div className="text-5xl font-semibold md:text-7xl">
             {currentTime}
           </div>
-          <div className="text-xl md:text-2xl font-medium text-white/90">
+          <div className="text-lg md:text-xl font-medium text-white/90">
             {currentDate}
           </div>
           <div className="w-full pt-2">
@@ -597,17 +597,17 @@ export default function Home() {
                   {currentAlbum && (
                       <div className="flex items-center gap-2">
                           <span>{currentAlbum.albumName}</span>
-                          <Folder size={18} className="shrink-0" />
+                          <Folder size={20} className="shrink-0" />
                       </div>
                   )}
                   {isDateValid && photoDate && (
-                       <div className="flex items-center gap-2 text-white/90">
+                       <div className="flex items-center gap-2 text-base text-white/90">
                            <span>{format(photoDate, 'MMMM d, yyyy')}</span>
                           <Calendar size={18} className="shrink-0" />
                       </div>
                   )}
                   {location && (
-                      <div className="flex items-center gap-2 text-white/90">
+                      <div className="flex items-center gap-2 text-base text-white/90">
                           <span>{location}</span>
                           <MapPin size={18} className="shrink-0" />
                       </div>
@@ -619,3 +619,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
