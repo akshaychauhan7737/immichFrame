@@ -155,12 +155,12 @@ export default function Home() {
 
 
   const loadNextAsset = useCallback(async () => {
-    let nextAssetIndex = (assetIndex + 1);
-    
-    // If we've reached the end of the current album's assets
+    let nextAssetIndex = assetIndex + 1;
+
+    // Check if we need to load the next album
     if (nextAssetIndex >= currentAssets.length) {
       // Setting current assets to empty will show loader and trigger album load effect
-      setCurrentAssets([]); 
+      setCurrentAssets([]);
       return;
     }
 
@@ -170,15 +170,17 @@ export default function Home() {
     const newUrl = await getImageWithRetry(nextAsset.id);
 
     if (newUrl) {
+      // Preload the next image into the hidden container
       if (isAVisible) {
         setImageB({ url: newUrl, id: nextAsset.id });
       } else {
         setImageA({ url: newUrl, id: nextAsset.id });
       }
+      // Update the index that will be used when the transition happens
       setAssetIndex(nextAssetIndex);
     } else {
-      // If we failed to get the image, skip to the next one immediately
-      setAssetIndex(i => (i + 1)); // This will trigger loadNextAsset again via useEffect
+      // If image fails to load, try the next one immediately
+      setAssetIndex(i => i + 1); // This will re-trigger the useEffect that depends on assetIndex
     }
   }, [assetIndex, currentAssets, getImageWithRetry, isAVisible]);
 
@@ -624,7 +626,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
-
-    
