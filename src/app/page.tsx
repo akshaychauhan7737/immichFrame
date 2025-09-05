@@ -16,7 +16,7 @@ const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '150
 const RETRY_DELAY = 5000; // 5 seconds
 const WEATHER_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const AIR_POLLUTION_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const ASSET_FETCH_PAGE_SIZE = 100;
+const ASSET_FETCH_PAGE_SIZE = 50;
 const LOCAL_STORAGE_PAGE_KEY = 'immich-view-fetch-page';
 
 // --- Environment Variable-based Configuration ---
@@ -243,7 +243,7 @@ export default function Home() {
       setError(null);
       
       try {
-        const response = await fetch(`${PROXY_URL}/search/metadata`, {
+        const response = await fetch(`${PROXY_URL}/search`, {
           method: 'POST',
           headers: { 
             'x-api-key': API_KEY as string, 
@@ -662,3 +662,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
