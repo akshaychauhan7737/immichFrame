@@ -18,6 +18,7 @@ const WEATHER_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const AIR_POLLUTION_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const MAX_VIDEO_DURATION_SECONDS = 10;
 const ASSET_FETCH_PAGE_SIZE = 100;
+const LOCAL_STORAGE_PAGE_KEY = 'immich-view-fetch-page';
 
 // --- Environment Variable-based Configuration ---
 const DISPLAY_MODE = process.env.NEXT_PUBLIC_DISPLAY_MODE; // 'portrait', 'landscape', or 'all'
@@ -198,6 +199,22 @@ export default function Home() {
 
 
   // --- Effects ---
+
+  // Load page from localStorage on mount
+  useEffect(() => {
+    const savedPage = localStorage.getItem(LOCAL_STORAGE_PAGE_KEY);
+    if (savedPage) {
+        setFetchPage(parseInt(savedPage, 10));
+    }
+  }, []);
+
+  // Save page to localStorage
+  useEffect(() => {
+    if (fetchPage > 1) { // Don't save initial value
+      localStorage.setItem(LOCAL_STORAGE_PAGE_KEY, fetchPage.toString());
+    }
+  }, [fetchPage]);
+
 
   // Main logic to fetch assets from search endpoint
   useEffect(() => {
@@ -623,6 +640,8 @@ export default function Home() {
     </main>
   );
 }
+
+    
 
     
 
