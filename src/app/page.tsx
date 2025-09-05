@@ -118,7 +118,7 @@ export default function Home() {
     if (asset.type === 'VIDEO') {
         url = `${PROXY_URL}/asset/${asset.id}/original`;
     } else { // IMAGE
-        url = `${PROXY_URL}/asset/${asset.id}/thumbnail?size=preview`;
+        url = `${PROXY_URL}/assets/${asset.id}/thumbnail?size=preview`;
     }
 
     try {
@@ -662,3 +662,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
