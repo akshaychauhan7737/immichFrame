@@ -127,10 +127,11 @@ export default function Home() {
   const getAssetUrl = useCallback(async (asset: ImmichAsset): Promise<string | null> => {
     if (configError) return null;
     const endpoint = asset.type === 'VIDEO' ? 'download' : 'thumbnail';
-    const sizeParam = asset.type === 'VIDEO' ? '' : '?size=preview';
-    
+    const sizeParam = asset.type === 'IMAGE' ? '?size=preview' : '';
+    const url = `${PROXY_URL}/assets/${asset.id}/${endpoint}${sizeParam}`;
+
     try {
-      const res = await fetch(`${PROXY_URL}/assets/${asset.id}/${endpoint}${sizeParam}`, {
+      const res = await fetch(url, {
         method: 'GET',
         headers: { 'x-api-key': API_KEY as string },
       });
@@ -182,7 +183,7 @@ export default function Home() {
     let nextIndex = (assetIndex + 1) % playlist.length;
     
     // If we're near the end of the playlist, start fetching the next page
-    if (playlist.length - nextIndex < 5 && playlist.length >= ASSET_FETCH_PAGE_SIZE) {
+    if (playlist.length > 0 && playlist.length - nextIndex < 5 && playlist.length % ASSET_FETCH_PAGE_SIZE === 0) {
       setFetchPage(p => p + 1);
     }
 
@@ -205,7 +206,7 @@ export default function Home() {
       }
       setAssetIndex(nextIndex);
     } else {
-      // If asset fails to load, try the next one immediately
+      // If asset fails to load, try the next one immediately by advancing the index and re-calling
       setAssetIndex(i => (i + 1) % playlist.length);
     }
   }, [assetIndex, playlist, getAssetWithRetry, isAVisible]);
@@ -266,7 +267,7 @@ export default function Home() {
         const data = await response.json();
         const fetchedAssets: ImmichAsset[] = data.assets.items;
         
-        if (playlist.length === 0 && fetchedAssets.length === 0) {
+        if (playlist.length === 0 && (!fetchedAssets || fetchedAssets.length === 0)) {
           setError(`No photos/videos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
           setIsLoading(false);
           return;
@@ -319,7 +320,7 @@ export default function Home() {
                     }
                  }
              } else {
-                 setAssetIndex(1); // Try the next one
+                 setAssetIndex(1); // Try the next one if first one fails
              }
          } else {
             setPlaylist(newPlaylist);
@@ -349,10 +350,9 @@ export default function Home() {
   
   // Post-transition logic: Load next asset into the hidden buffer
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || playlist.length === 0) return;
 
     // After the transition animation completes, load the next asset into the now-hidden container
-    // And clean up the old asset's Object URL
     const transitionDelay = 1000; // Matches CSS transition duration
     const timer = setTimeout(() => {
         const oldMedia = isAVisible ? mediaB : mediaA;
@@ -370,12 +370,15 @@ export default function Home() {
 
     return () => clearTimeout(timer);
 
-  }, [isAVisible, isLoading, loadNextAssetIntoBuffer, mediaA, mediaB]);
+  }, [isAVisible, isLoading, loadNextAssetIntoBuffer, mediaA, mediaB, playlist.length]);
 
 
   // Progress bar animation
   useEffect(() => {
-    if (isLoading || error || !currentMedia) return;
+    if (isLoading || error || !currentMedia) {
+      setProgress(0);
+      return;
+    }
     
     setProgress(0);
     
@@ -384,8 +387,21 @@ export default function Home() {
     const interval = setInterval(() => {
       setProgress(p => Math.min(p + (100 / (displayDuration / 100)), 100));
     }, 100);
+
     return () => clearInterval(interval);
   }, [currentMedia, isLoading, error]); 
+
+  // Recursive effect to handle asset loading failures
+  useEffect(() => {
+    if (!isLoading && playlist.length > 0) {
+      const visibleMedia = isAVisible ? mediaA : mediaB;
+      const hiddenMedia = isAVisible ? mediaB : mediaA;
+
+      if (visibleMedia && !hiddenMedia) {
+        loadNextAssetIntoBuffer();
+      }
+    }
+  }, [assetIndex, isLoading, playlist, mediaA, mediaB, isAVisible, loadNextAssetIntoBuffer]);
 
   // Clock
   useEffect(() => {
