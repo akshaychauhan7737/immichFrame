@@ -500,7 +500,7 @@ export default function Home() {
                     key={`${media.id}-bg`}
                     src={media.url}
                     aria-hidden="true"
-                    className={cn(commonProps.className, "object-cover blur-2xl scale-110 h-full w-full")}
+                    className={cn(commonProps.className, "absolute object-cover blur-2xl scale-110 h-full w-full")}
                     autoPlay
                     muted
                     loop
