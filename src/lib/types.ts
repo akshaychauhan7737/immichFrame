@@ -12,7 +12,7 @@ export interface ImmichAsset {
   modifiedAt: string;
   isFavorite: boolean;
   mimeType: string | null;
-  duration: string | null;
+  duration: string; // e.g., "00:00:09.123456"
   isArchived: boolean;
   exifInfo?: {
     city?: string;
@@ -29,7 +29,7 @@ export interface ImmichAlbum {
   id: string;
   albumName: string;
   description: string;
-  ownerId: string;
+  ownerId:string;
   createdAt: string;
   updatedAt: string;
   albumThumbnailAssetId: string | null;

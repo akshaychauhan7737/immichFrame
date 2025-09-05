@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { ImmichAlbum, ImmichAsset, AirPollutionData, WeatherData } from '@/lib/types';
+import type { ImmichAsset, AirPollutionData, WeatherData } from '@/lib/types';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { Progress } from "@/components/ui/progress";
@@ -16,16 +16,18 @@ const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '150
 const RETRY_DELAY = 5000; // 5 seconds
 const WEATHER_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const AIR_POLLUTION_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
+const MAX_VIDEO_DURATION_SECONDS = 10;
+const ASSET_FETCH_PAGE_SIZE = 100;
 
 // --- Environment Variable-based Configuration ---
 const DISPLAY_MODE = process.env.NEXT_PUBLIC_DISPLAY_MODE; // 'portrait', 'landscape', or 'all'
 const SERVER_URL_CONFIGURED = !!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
 const API_KEY = process.env.NEXT_PUBLIC_IMMICH_API_KEY;
 const IS_FAVORITE_ONLY = process.env.NEXT_PUBLIC_IMMICH_IS_FAVORITE_ONLY === 'true';
+const IS_ARCHIVED_INCLUDED = process.env.NEXT_PUBLIC_IMMICH_INCLUDE_ARCHIVED === 'true';
 const LATITUDE = process.env.NEXT_PUBLIC_LATITUDE;
 const LONGITUDE = process.env.NEXT_PUBLIC_LONGITUDE;
 const OPENWEATHER_API_KEY = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
-
 
 // We use a local proxy to avoid CORS issues for Immich.
 const PROXY_URL = '/api/immich';
@@ -41,6 +43,15 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+const parseDuration = (duration: string): number => {
+    const parts = duration.split(':');
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    const seconds = parseFloat(parts[2]);
+    return hours * 3600 + minutes * 60 + seconds;
+};
+
 
 const getWeatherInfo = (code: number): { Icon: React.ElementType, name: string } => {
     // OpenWeatherMap Weather condition codes
@@ -66,15 +77,19 @@ const getAqiInfo = (aqi: number): { label: string; color: string } => {
     }
 }
 
+type MediaAsset = {
+  id: string;
+  url: string;
+  type: 'IMAGE' | 'VIDEO';
+};
 
 export default function Home() {
   const { toast } = useToast();
   
   // --- State Management ---
-  const [currentAssets, setCurrentAssets] = useState<ImmichAsset[]>([]);
-  const [currentAlbum, setCurrentAlbum] = useState<ImmichAlbum | null>(null);
+  const [playlist, setPlaylist] = useState<ImmichAsset[]>([]);
   const [assetIndex, setAssetIndex] = useState(0);
-
+  const [fetchPage, setFetchPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState('');
@@ -83,15 +98,10 @@ export default function Home() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [airPollution, setAirPollution] = useState<AirPollutionData | null>(null);
 
-
-  const [imageA, setImageA] = useState<{ url: string, id: string }>({ url: '', id: 'initialA' });
-  const [imageB, setImageB] = useState<{ url: string, id: string }>({ url: '', id: 'initialB' });
+  const [mediaA, setMediaA] = useState<MediaAsset | null>(null);
+  const [mediaB, setMediaB] = useState<MediaAsset | null>(null);
   const [isAVisible, setIsAVisible] = useState(true);
-  const [nextImageLoaded, setNextImageLoaded] = useState(false);
-
-  // Refs to hold the full list of albums and our position in it
-  const albumPlaylist = useRef<ImmichAlbum[]>([]);
-  const albumIndex = useRef(0);
+  const [nextMediaLoaded, setNextMediaLoaded] = useState(false);
 
   const configError = useMemo(() => {
     if (!SERVER_URL_CONFIGURED || !API_KEY) {
@@ -103,91 +113,93 @@ export default function Home() {
     return null;
   }, []);
   
-  const currentAsset = useMemo(() => currentAssets[assetIndex], [currentAssets, assetIndex]);
+  const currentAsset = useMemo(() => playlist[assetIndex], [playlist, assetIndex]);
 
-  // --- Image Fetching Logic ---
-  const getImageUrl = useCallback(async (assetId: string): Promise<string | null> => {
+  // --- Asset Fetching Logic ---
+  const getAssetUrl = useCallback(async (asset: ImmichAsset): Promise<string | null> => {
     if (configError) return null;
+    const endpoint = asset.type === 'VIDEO' ? 'video' : 'thumbnail';
+    const sizeParam = asset.type === 'VIDEO' ? '' : '?size=preview';
+    
     try {
-      const res = await fetch(`${PROXY_URL}/assets/${assetId}/thumbnail?size=preview`, {
+      const res = await fetch(`${PROXY_URL}/assets/${asset.id}/${endpoint}${sizeParam}`, {
         method: 'GET',
         headers: { 'x-api-key': API_KEY as string },
       });
       if (!res.ok) {
-        throw new Error(`Failed to fetch image: ${res.statusText}`);
+        throw new Error(`Failed to fetch ${asset.type}: ${res.statusText}`);
       }
       const blob = await res.blob();
       return URL.createObjectURL(blob);
     } catch (e: any)      {
-        console.error(`Error fetching image ${assetId}:`, e);
+        console.error(`Error fetching asset ${asset.id}:`, e);
         toast({
             variant: "destructive",
-            title: "Image Fetch Error",
-            description: `Could not load image ${assetId}.`,
+            title: "Asset Fetch Error",
+            description: `Could not load ${asset.type} ${asset.id}.`,
         });
         return null;
     }
   }, [configError, toast]);
   
-  const getImageWithRetry = useCallback(async (assetId: string, retries = 1): Promise<string | null> => {
-      let url = await getImageUrl(assetId);
-      if (url) {
-          return url;
-      }
+  const getAssetWithRetry = useCallback(async (asset: ImmichAsset, retries = 1): Promise<string | null> => {
+      let url = await getAssetUrl(asset);
+      if (url) return url;
       
       if (retries > 0) {
           toast({
-              title: "Retrying Image Load",
-              description: `Will retry loading image in ${RETRY_DELAY / 1000} seconds.`,
+              title: "Retrying Asset Load",
+              description: `Will retry loading in ${RETRY_DELAY / 1000} seconds.`,
           });
           await delay(RETRY_DELAY);
-          return await getImageWithRetry(assetId, retries - 1);
+          return await getAssetWithRetry(asset, retries - 1);
       }
       
       toast({
           variant: "destructive",
-          title: "Image Load Failed",
-          description: `Skipping image ${assetId} after multiple attempts.`,
+          title: "Asset Load Failed",
+          description: `Skipping asset ${asset.id} after multiple attempts.`,
       });
       return null;
-
-  }, [getImageUrl, toast]);
+  }, [getAssetUrl, toast]);
 
 
   const loadNextAsset = useCallback(async () => {
-    let nextAssetIndex = assetIndex + 1;
+    let nextIndex = assetIndex + 1;
 
-    // Check if we need to load the next album
-    if (nextAssetIndex >= currentAssets.length) {
-      // Setting current assets to empty will show loader and trigger album load effect
-      setCurrentAssets([]);
-      return;
+    // If we're near the end of the playlist, fetch more assets
+    if (nextIndex >= playlist.length - 5) {
+      setFetchPage(p => p + 1);
+    }
+    
+    // If we've reached the end, loop back
+    if (nextIndex >= playlist.length) {
+      nextIndex = 0;
     }
 
-    const nextAsset = currentAssets[nextAssetIndex];
+    const nextAsset = playlist[nextIndex];
     if (!nextAsset) return;
 
-    const newUrl = await getImageWithRetry(nextAsset.id);
+    const newUrl = await getAssetWithRetry(nextAsset);
 
     if (newUrl) {
-      // Preload the next image into the hidden container
+      const newMedia: MediaAsset = { url: newUrl, id: nextAsset.id, type: nextAsset.type };
       if (isAVisible) {
-        setImageB({ url: newUrl, id: nextAsset.id });
+        setMediaB(newMedia);
       } else {
-        setImageA({ url: newUrl, id: nextAsset.id });
+        setMediaA(newMedia);
       }
-      // Update the index that will be used when the transition happens
-      setAssetIndex(nextAssetIndex);
+      setAssetIndex(nextIndex);
     } else {
-      // If image fails to load, try the next one immediately
-      setAssetIndex(i => i + 1); // This will re-trigger the useEffect that depends on assetIndex
+      // If asset fails to load, try the next one immediately
+      setAssetIndex(i => i + 1);
     }
-  }, [assetIndex, currentAssets, getImageWithRetry, isAVisible]);
+  }, [assetIndex, playlist, getAssetWithRetry, isAVisible]);
 
 
   // --- Effects ---
 
-  // Main logic to find and load a suitable album with assets
+  // Main logic to fetch assets from search endpoint
   useEffect(() => {
     if (configError) {
       setError(configError);
@@ -195,163 +207,156 @@ export default function Home() {
       return;
     }
 
-    const findAndLoadAlbum = async () => {
-      setIsLoading(true);
+    const fetchAssets = async () => {
+      if(fetchPage === 1) setIsLoading(true);
       setError(null);
-    
-      // 1. Fetch all albums if the playlist is empty
-      if (albumPlaylist.current.length === 0) {
-        try {
-          const albumsResponse = await fetch(`${PROXY_URL}/albums`, {
-            headers: { 'x-api-key': API_KEY as string, 'Accept': 'application/json' },
-          });
-          if (!albumsResponse.ok) throw new Error('Failed to fetch album list.');
-          const allAlbums: ImmichAlbum[] = await albumsResponse.json();
-          
-          if (allAlbums.length === 0) {
-            setError("No albums found on the Immich server.");
-            setIsLoading(false);
-            return;
-          }
-          albumPlaylist.current = shuffleArray(allAlbums);
-          albumIndex.current = 0; // Start from the beginning of the shuffled list
-        } catch (e: any) {
-          setError(`Failed to connect to Immich server: ${e.message}`);
+      
+      try {
+        const response = await fetch(`${PROXY_URL}/search/metadata`, {
+          method: 'POST',
+          headers: { 
+            'x-api-key': API_KEY as string, 
+            'Content-Type': 'application/json',
+            'Accept': 'application/json' 
+          },
+          body: JSON.stringify({
+              isFavorite: IS_FAVORITE_ONLY,
+              isArchived: IS_ARCHIVED_INCLUDED ? undefined : false,
+              page: fetchPage,
+              size: ASSET_FETCH_PAGE_SIZE,
+          })
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`Failed to fetch assets: ${response.statusText} - ${errorText}`);
+        }
+        
+        const fetchedAssets: ImmichAsset[] = await response.json();
+        
+        if (fetchPage === 1 && fetchedAssets.length === 0) {
+          setError(`No photos/videos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
           setIsLoading(false);
           return;
         }
-      }
 
-      // 2. Iterate through the album playlist to find one with matching photos
-      let foundSuitableAlbum = false;
-      const initialAlbumIndex = albumIndex.current;
-      
-      while (!foundSuitableAlbum) {
-        const targetAlbum = albumPlaylist.current[albumIndex.current];
+        let filteredAssets = fetchedAssets.filter(asset => {
+            if (asset.type === 'VIDEO') {
+                try {
+                    const videoDuration = parseDuration(asset.duration);
+                    if (videoDuration > MAX_VIDEO_DURATION_SECONDS) return false;
+                } catch (e) {
+                    console.warn(`Could not parse duration for video ${asset.id}: ${asset.duration}`);
+                    return false;
+                }
+            }
+            
+            if (DISPLAY_MODE && DISPLAY_MODE !== 'all') {
+                const orientation = asset.exifInfo?.orientation;
+                if (orientation) {
+                    if (DISPLAY_MODE === 'landscape') return orientation === 1;
+                    if (DISPLAY_MODE === 'portrait') return [6, 8].includes(orientation);
+                }
+                const width = asset.exifInfo?.exifImageWidth;
+                const height = asset.exifInfo?.exifImageHeight;
+                if (width && height && width > 0 && height > 0) {
+                    if (DISPLAY_MODE === 'landscape') return width > height;
+                    if (DISPLAY_MODE === 'portrait') return height > width;
+                }
+                return false;
+            }
+            return true;
+        });
 
-        try {
-          const albumDetailsResponse = await fetch(`${PROXY_URL}/albums/${targetAlbum.id}`, {
-            headers: { 'x-api-key': API_KEY as string, 'Accept': 'application/json' },
-          });
-          if (!albumDetailsResponse.ok) throw new Error(`Could not fetch details for album ${targetAlbum.albumName}.`);
-          
-          const albumWithAssets: ImmichAlbum = await albumDetailsResponse.json();
-          let fetchedAssets = albumWithAssets.assets;
+        const newPlaylist = fetchPage === 1 ? shuffleArray(filteredAssets) : [...playlist, ...shuffleArray(filteredAssets)];
+        setPlaylist(newPlaylist);
 
-          if (IS_FAVORITE_ONLY) {
-            fetchedAssets = fetchedAssets.filter(asset => asset.isFavorite);
-          }
-          
-          if (DISPLAY_MODE && DISPLAY_MODE !== 'all') {
-            fetchedAssets = fetchedAssets.filter(asset => {
-              const orientation = asset.exifInfo?.orientation;
-              // Prioritize orientation tag
-              if (orientation) {
-                if (DISPLAY_MODE === 'landscape') return orientation === 1;
-                if (DISPLAY_MODE === 'portrait') return [6, 8].includes(orientation);
-              }
-              // Fallback to dimensions
-              const width = asset.exifInfo?.exifImageWidth;
-              const height = asset.exifInfo?.exifImageHeight;
-              if (width && height && width > 0 && height > 0) {
-                  if (DISPLAY_MODE === 'landscape') return width > height;
-                  if (DISPLAY_MODE === 'portrait') return height > width;
-              }
-              return false;
-            });
-          }
-          
-          // Move to the next album index for the next cycle
-          albumIndex.current = (albumIndex.current + 1) % albumPlaylist.current.length;
-
-          if (fetchedAssets.length > 0) {
-            const shuffledAssets = shuffleArray(fetchedAssets);
-            setCurrentAlbum(albumWithAssets);
-            setCurrentAssets(shuffledAssets);
-            setAssetIndex(0);
-
-            const firstAssetUrl = await getImageWithRetry(shuffledAssets[0].id);
-            if (firstAssetUrl) {
-              setImageA({ url: firstAssetUrl, id: shuffledAssets[0].id });
-              setImageB({ url: '', id: 'clearedB' }); // Ensure B is cleared
-              setIsAVisible(true);
+        if (fetchPage === 1 && newPlaylist.length > 0) {
+            const firstAsset = newPlaylist[0];
+            const firstUrl = await getAssetWithRetry(firstAsset);
+            if (firstUrl) {
+                setMediaA({ url: firstUrl, id: firstAsset.id, type: firstAsset.type });
+                setMediaB(null);
+                setIsAVisible(true);
             } else {
-              throw new Error('Could not load first image of the album.');
+                // If first asset fails, try the next one
+                setAssetIndex(1);
             }
-            foundSuitableAlbum = true;
-          } else {
-             // If we've looped through all albums and found nothing
-            if (albumIndex.current === initialAlbumIndex) {
-              setError(`No photos matching your filters (display_mode: ${DISPLAY_MODE}, favorites_only: ${IS_FAVORITE_ONLY}) could be found in any of your ${albumPlaylist.current.length} albums.`);
-              setIsLoading(false);
-              return;
-            }
-          }
-        } catch (e: any) {
-          console.error(e);
-          // Try next album on error
-          albumIndex.current = (albumIndex.current + 1) % albumPlaylist.current.length;
-          if (albumIndex.current === initialAlbumIndex) {
-            setError(`After trying all albums, failed to load any photos. Last error: ${e.message}`);
-            setIsLoading(false);
-            return;
-          }
         }
+        
+      } catch (e: any) {
+          setError(`Failed to connect to Immich server: ${e.message}`);
+      } finally {
+          setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
-    // This effect should only run when we need to load a new album,
-    // which is on startup or when currentAssets becomes empty.
-    if(currentAssets.length === 0 && !configError) {
-        findAndLoadAlbum();
+    fetchAssets();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configError, fetchPage]);
+
+  // Asset rotation timer
+  useEffect(() => {
+    if (playlist.length === 0 || isLoading || error) return;
+    
+    let displayDuration = DURATION;
+    const currentMedia = isAVisible ? mediaA : mediaB;
+    if (currentMedia?.type === 'VIDEO') {
+        const asset = playlist.find(p => p.id === currentMedia.id);
+        if (asset) {
+            displayDuration = parseDuration(asset.duration) * 1000;
+        }
     }
 
-  }, [configError, getImageWithRetry, currentAssets.length]);
-
-  // Image rotation timer
-  useEffect(() => {
-    if (currentAssets.length === 0 || isLoading || error) return;
-    
     const timer = setTimeout(() => {
       loadNextAsset();
-    }, DURATION);
+    }, displayDuration);
 
     return () => clearTimeout(timer);
-  }, [assetIndex, currentAssets, isLoading, error, loadNextAsset]);
+  }, [assetIndex, playlist, isLoading, error, loadNextAsset, isAVisible, mediaA, mediaB]);
   
-  // When next image is loaded, trigger the visibility switch
+  // When next media is loaded, trigger the visibility switch
   useEffect(() => {
-    if (!nextImageLoaded) return;
+    if (!nextMediaLoaded) return;
     
     const newIsAVisible = !isAVisible;
     setIsAVisible(newIsAVisible);
-    setNextImageLoaded(false);
+    setNextMediaLoaded(false);
 
-    // After the transition starts, clean up the old image's Object URL
-    // to prevent memory leaks.
+    // After the transition starts, clean up the old media's Object URL
     setTimeout(() => {
-        if (newIsAVisible) { // A is now visible, so B was the old one
-            if(imageB.url) URL.revokeObjectURL(imageB.url);
-            setImageB({url: '', id: 'clearedB'});
-        } else { // B is now visible, so A was the old one
-            if(imageA.url) URL.revokeObjectURL(imageA.url);
-            setImageA({url: '', id: 'clearedA'});
+        const oldMedia = newIsAVisible ? mediaB : mediaA;
+        if(oldMedia?.url) URL.revokeObjectURL(oldMedia.url);
+
+        if (newIsAVisible) { 
+            setMediaB(null);
+        } else {
+            setMediaA(null);
         }
     }, 1000); // This should match the CSS transition duration
 
-  }, [nextImageLoaded, isAVisible, imageA.url, imageB.url]);
+  }, [nextMediaLoaded, isAVisible, mediaA, mediaB]);
 
 
   // Progress bar animation
   useEffect(() => {
-    if (isLoading || error) return;
+    if (isLoading || error || playlist.length === 0) return;
     setProgress(0);
+
+    let displayDuration = DURATION;
+    const currentMedia = isAVisible ? mediaA : mediaB;
+    if (currentMedia?.type === 'VIDEO') {
+        const asset = playlist.find(p => p.id === currentMedia.id);
+        if (asset) {
+            displayDuration = parseDuration(asset.duration) * 1000;
+        }
+    }
+    
     const interval = setInterval(() => {
-      setProgress(p => Math.min(p + (100 / (DURATION / 100)), 100));
+      setProgress(p => Math.min(p + (100 / (displayDuration / 100)), 100));
     }, 100);
     return () => clearInterval(interval);
-  }, [assetIndex, isLoading, error]); 
+  }, [assetIndex, isLoading, error, playlist, isAVisible, mediaA, mediaB]); 
 
   // Clock
   useEffect(() => {
@@ -449,14 +454,14 @@ export default function Home() {
     );
   }
   
-  if (currentAssets.length === 0 && !isLoading) {
+  if (playlist.length === 0 && !isLoading) {
      return (
       <div className="flex h-screen w-screen items-center justify-center bg-background p-8">
         <Alert className="max-w-md">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>No Photos To Display</AlertTitle>
+          <AlertTitle>No Media To Display</AlertTitle>
           <AlertDescription>
-            Could not find any suitable photos on your Immich server. Check your configuration and albums.
+            Could not find any suitable photos or videos on your Immich server. Check your configuration.
           </AlertDescription>
         </Alert>
       </div>
@@ -471,63 +476,60 @@ export default function Home() {
   const weatherInfo = weather ? getWeatherInfo(weather.weatherCode) : null;
   const aqiInfo = airPollution ? getAqiInfo(airPollution.main.aqi) : null;
 
+  const renderMedia = (media: MediaAsset | null) => {
+    if (!media) return null;
+    if (media.type === 'VIDEO') {
+        return (
+            <>
+                {/* No background for videos as they fill the screen */}
+                <video
+                    key={media.id}
+                    src={media.url}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    className="object-contain w-full h-full"
+                    onLoadedData={() => setNextMediaLoaded(true)}
+                />
+            </>
+        )
+    }
+    return (
+        <>
+            <Image
+                key={`${media.id}-bg`}
+                src={media.url}
+                alt=""
+                aria-hidden="true"
+                fill
+                className="object-cover blur-2xl scale-110"
+            />
+            <div className="absolute inset-0 bg-black/50"></div>
+            <Image
+                key={media.id}
+                src={media.url}
+                alt="Immich Photo"
+                fill
+                className="object-contain"
+                onLoad={() => setNextMediaLoaded(true)}
+                priority
+            />
+        </>
+    );
+  }
+
 
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-black">
-      {/* Image A Container */}
+      {/* Media A Container */}
       <div className={cn('absolute inset-0 transition-opacity duration-1000 ease-in-out', isAVisible ? 'opacity-100' : 'opacity-0')}>
-        {imageA.url && (
-          <>
-            <Image
-              key={`${imageA.id}-bg`}
-              src={imageA.url}
-              alt=""
-              aria-hidden="true"
-              fill
-              className="object-cover blur-2xl scale-110"
-            />
-            <div className="absolute inset-0 bg-black/50"></div>
-            <Image
-              key={imageA.id}
-              src={imageA.url}
-              alt="Immich Photo"
-              fill
-              className="object-contain"
-              onLoad={() => {
-                 if (!isAVisible) setNextImageLoaded(true);
-              }}
-              priority
-            />
-          </>
-        )}
+        {renderMedia(mediaA)}
       </div>
 
-      {/* Image B Container */}
+      {/* Media B Container */}
       <div className={cn('absolute inset-0 transition-opacity duration-1000 ease-in-out', !isAVisible ? 'opacity-100' : 'opacity-0')}>
-        {imageB.url && (
-          <>
-            <Image
-              key={`${imageB.id}-bg`}
-              src={imageB.url}
-              alt=""
-              aria-hidden="true"
-              fill
-              className="object-cover blur-2xl scale-110"
-            />
-            <div className="absolute inset-0 bg-black/50"></div>
-            <Image
-              key={imageB.id}
-              src={imageB.url}
-              alt="Immich Photo"
-              fill
-              className="object-contain"
-              onLoad={() => {
-                if (isAVisible) setNextImageLoaded(true);
-              }}
-              priority
-            />
-          </>
-        )}
+        {renderMedia(mediaB)}
       </div>
 
       {/* Top Left: Air Pollution */}
@@ -598,15 +600,9 @@ export default function Home() {
         </div>
 
         {/* Right Box: Photo Details */}
-        {(currentAlbum || (currentAsset && isDateValid) || location) && (
+        {(isDateValid || location) && (
           <div className="space-y-1.5 rounded-lg bg-black/30 p-4 backdrop-blur-sm text-right">
               <div className="flex flex-col items-end text-lg md:text-xl font-medium">
-                  {currentAlbum && (
-                      <div className="flex items-center gap-2">
-                          <span>{currentAlbum.albumName}</span>
-                          <Folder size={20} className="shrink-0" />
-                      </div>
-                  )}
                   {isDateValid && photoDate && (
                        <div className="flex items-center gap-2 text-base text-white/90">
                            <span>{format(photoDate, 'MMMM d, yyyy')}</span>
