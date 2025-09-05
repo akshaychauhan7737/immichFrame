@@ -254,6 +254,7 @@ export default function Home() {
               isArchived: IS_ARCHIVED_INCLUDED ? undefined : false,
               page: fetchPage,
               size: ASSET_FETCH_PAGE_SIZE,
+              withExif: true,
           })
         });
 
@@ -631,6 +632,7 @@ export default function Home() {
           <div className="text-2xl md:text-3xl font-medium text-white/90">
             {currentDate}
           </div>
+
           <div className="w-full pt-2">
             <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white" />
           </div>
@@ -676,5 +678,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
