@@ -110,7 +110,7 @@ export default function Home() {
       return "Server URL or API Key is missing. Please check your environment variables.";
     }
     if (DISPLAY_MODE && !['portrait', 'landscape', 'all'].includes(DISPLAY_MODE)) {
-      return `Invalid value for NEXT_PUBLIC_DISPLAY_MODE. It must be one of 'portrait', 'landscape', or 'all'. Found: ${DISPLAY_MODE}`;
+      return `Invalid value for NEXT_PUBLIC_DISPLAY_MODE. It must be one of 'portrait', 'landscape', 'all'. Found: ${DISPLAY_MODE}`;
     }
     return null;
   }, []);
