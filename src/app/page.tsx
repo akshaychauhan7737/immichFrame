@@ -212,7 +212,7 @@ export default function Home() {
       setError(null);
       
       try {
-        const response = await fetch(`${PROXY_URL}/search/metadata`, {
+        const response = await fetch(`${PROXY_URL}/search`, {
           method: 'POST',
           headers: { 
             'x-api-key': API_KEY as string, 
@@ -232,7 +232,8 @@ export default function Home() {
             throw new Error(`Failed to fetch assets: ${response.statusText} - ${errorText}`);
         }
         
-        const fetchedAssets: ImmichAsset[] = await response.json();
+        const data = await response.json();
+        const fetchedAssets: ImmichAsset[] = data.assets;
         
         if (fetchPage === 1 && fetchedAssets.length === 0) {
           setError(`No photos/videos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
@@ -622,3 +623,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
