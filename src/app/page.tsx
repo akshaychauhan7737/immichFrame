@@ -116,7 +116,7 @@ export default function Home() {
     const headers: HeadersInit = { 'x-api-key': API_KEY as string };
 
     if (asset.type === 'VIDEO') {
-        url = `${PROXY_URL}/asset/${asset.id}/original`;
+        url = `${PROXY_URL}/assets/${asset.id}/original`;
     } else { // IMAGE
         url = `${PROXY_URL}/assets/${asset.id}/thumbnail?size=preview`;
     }
@@ -662,5 +662,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
