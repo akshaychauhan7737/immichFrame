@@ -71,7 +71,7 @@ const getAqiInfo = (aqi: number): { label: string; color: string } => {
 type MediaAsset = {
   id: string;
   url: string;
-  type: 'IMAGE';
+  type: 'IMAGE' | 'VIDEO';
 };
 
 export default function Home() {
@@ -88,10 +88,11 @@ export default function Home() {
   const [progress, setProgress] = useState(0);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [airPollution, setAirPollution] = useState<AirPollutionData | null>(null);
-
   const [currentMedia, setCurrentMedia] = useState<MediaAsset | null>(null);
   const [isFading, setIsFading] = useState(false);
-  
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+
   const configError = useMemo(() => {
     if (!SERVER_URL_CONFIGURED || !API_KEY) {
       return "Server URL or API Key is missing. Please check your environment variables.";
@@ -111,8 +112,14 @@ export default function Home() {
   const getAssetUrl = useCallback(async (asset: ImmichAsset): Promise<string | null> => {
     if (configError) return null;
     
-    const url = `${PROXY_URL}/asset/${asset.id}/thumbnail?size=preview`;
-    const headers = { 'x-api-key': API_KEY as string };
+    let url: string;
+    const headers: HeadersInit = { 'x-api-key': API_KEY as string };
+
+    if (asset.type === 'VIDEO') {
+        url = `${PROXY_URL}/asset/${asset.id}/original`;
+    } else { // IMAGE
+        url = `${PROXY_URL}/asset/${asset.id}/thumbnail?size=preview`;
+    }
 
     try {
       const res = await fetch(url, {
@@ -193,7 +200,7 @@ export default function Home() {
       setCurrentMedia({ 
           url: newUrl, 
           id: nextAsset.id, 
-          type: 'IMAGE',
+          type: nextAsset.type as 'IMAGE' | 'VIDEO',
       });
       setAssetIndex(nextIndex);
     } else {
@@ -267,11 +274,7 @@ export default function Home() {
         }
 
         let filteredAssets = fetchedAssets.filter(asset => {
-            if (asset.type === 'VIDEO') {
-                return false; // Exclude all videos
-            }
-            
-            if (DISPLAY_MODE && DISPLAY_MODE !== 'all') {
+            if (DISPLAY_MODE && DISPLAY_MODE !== 'all' && asset.type === 'IMAGE') {
                 const orientation = asset.exifInfo?.orientation;
                 if (orientation) {
                     if (DISPLAY_MODE === 'landscape') return orientation === 1;
@@ -296,7 +299,7 @@ export default function Home() {
              const firstAsset = newPlaylist[0];
              const firstUrl = await getAssetWithRetry(firstAsset);
              if (firstUrl) {
-                setCurrentMedia({ url: firstUrl, id: firstAsset.id, type: 'IMAGE' });
+                setCurrentMedia({ url: firstUrl, id: firstAsset.id, type: firstAsset.type as 'IMAGE' | 'VIDEO' });
              } else {
                  setAssetIndex(1); // Will be picked up by the other effect
              }
@@ -315,9 +318,9 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configError, fetchPage]);
 
-  // Asset rotation timer
+  // Asset rotation timer for images
   useEffect(() => {
-    if (isLoading || !currentMedia) return;
+    if (isLoading || !currentMedia || currentMedia.type === 'VIDEO') return;
 
     const timer = setTimeout(() => {
         advanceToNextAsset();
@@ -336,7 +339,10 @@ export default function Home() {
     
     setProgress(0);
     
-    const displayDuration = DURATION;
+    let displayDuration = DURATION;
+    if (currentMedia.type === 'VIDEO' && videoRef.current && videoRef.current.duration) {
+        displayDuration = videoRef.current.duration * 1000;
+    }
 
     const interval = setInterval(() => {
       setProgress(p => Math.min(p + (100 / (displayDuration / 100)), 100));
@@ -486,6 +492,36 @@ export default function Home() {
         src: media.url,
         className: cn("transition-opacity duration-500", isFading ? 'opacity-0' : 'opacity-100')
     };
+
+    if (media.type === 'VIDEO') {
+        return (
+            <>
+                <video
+                    key={`${media.id}-bg`}
+                    src={media.url}
+                    aria-hidden="true"
+                    className={cn(commonProps.className, "object-cover blur-2xl scale-110 h-full w-full")}
+                    autoPlay
+                    muted
+                    loop
+                />
+                 <div className="absolute inset-0 bg-black/50"></div>
+                <video
+                    ref={videoRef}
+                    key={media.id}
+                    src={media.url}
+                    onEnded={advanceToNextAsset}
+                    onLoadedData={() => {
+                        // This forces a re-render to update duration for progress bar
+                        if(videoRef.current) setProgress(0);
+                    }}
+                    autoPlay
+                    muted
+                    className={cn(commonProps.className, "object-contain h-full w-full")}
+                />
+            </>
+        )
+    }
     
     return (
         <>
@@ -626,3 +662,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
