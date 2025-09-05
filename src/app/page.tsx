@@ -16,7 +16,6 @@ const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '150
 const RETRY_DELAY = 5000; // 5 seconds
 const WEATHER_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const AIR_POLLUTION_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const MAX_VIDEO_DURATION_SECONDS = 10;
 const ASSET_FETCH_PAGE_SIZE = 100;
 const LOCAL_STORAGE_PAGE_KEY = 'immich-view-fetch-page';
 
@@ -45,15 +44,6 @@ function shuffleArray<T>(array: T[]): T[] {
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
-const parseDuration = (duration: string): number => {
-    const parts = duration.split(':');
-    const hours = parseInt(parts[0], 10);
-    const minutes = parseInt(parts[1], 10);
-    const seconds = parseFloat(parts[2]);
-    return hours * 3600 + minutes * 60 + seconds;
-};
-
-
 const getWeatherInfo = (code: number): { Icon: React.ElementType, name: string } => {
     // OpenWeatherMap Weather condition codes
     if (code >= 200 && code < 300) return { Icon: Zap, name: 'Thunderstorm' };
@@ -81,8 +71,7 @@ const getAqiInfo = (aqi: number): { label: string; color: string } => {
 type MediaAsset = {
   id: string;
   url: string;
-  type: 'IMAGE' | 'VIDEO';
-  duration?: number;
+  type: 'IMAGE';
 };
 
 export default function Home() {
@@ -103,8 +92,6 @@ export default function Home() {
   const [currentMedia, setCurrentMedia] = useState<MediaAsset | null>(null);
   const [isFading, setIsFading] = useState(false);
   
-  const videoRef = useRef<HTMLVideoElement>(null);
-
   const configError = useMemo(() => {
     if (!SERVER_URL_CONFIGURED || !API_KEY) {
       return "Server URL or API Key is missing. Please check your environment variables.";
@@ -124,16 +111,8 @@ export default function Home() {
   const getAssetUrl = useCallback(async (asset: ImmichAsset): Promise<string | null> => {
     if (configError) return null;
     
-    let url: string;
-    let headers: HeadersInit;
-
-    if (asset.type === 'VIDEO') {
-        url = `${PROXY_URL}/assets/${asset.id}/video/playback`;
-        headers = { 'Authorization': `Bearer ${API_KEY as string}` };
-    } else {
-        url = `${PROXY_URL}/asset/${asset.id}/thumbnail?size=preview`;
-        headers = { 'x-api-key': API_KEY as string };
-    }
+    const url = `${PROXY_URL}/asset/${asset.id}/thumbnail?size=preview`;
+    const headers = { 'x-api-key': API_KEY as string };
 
     try {
       const res = await fetch(url, {
@@ -214,8 +193,7 @@ export default function Home() {
       setCurrentMedia({ 
           url: newUrl, 
           id: nextAsset.id, 
-          type: nextAsset.type,
-          duration: nextAsset.type === 'VIDEO' ? parseDuration(nextAsset.duration) * 1000 : undefined
+          type: 'IMAGE',
       });
       setAssetIndex(nextIndex);
     } else {
@@ -283,20 +261,14 @@ export default function Home() {
         const fetchedAssets: ImmichAsset[] = data.assets.items;
         
         if (playlist.length === 0 && (!fetchedAssets || fetchedAssets.length === 0)) {
-          setError(`No photos/videos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
+          setError(`No photos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
           setIsLoading(false);
           return;
         }
 
         let filteredAssets = fetchedAssets.filter(asset => {
             if (asset.type === 'VIDEO') {
-                try {
-                    const videoDuration = parseDuration(asset.duration);
-                    if (videoDuration > MAX_VIDEO_DURATION_SECONDS) return false;
-                } catch (e) {
-                    console.warn(`Could not parse duration for video ${asset.id}: ${asset.duration}`);
-                    return false;
-                }
+                return false; // Exclude all videos
             }
             
             if (DISPLAY_MODE && DISPLAY_MODE !== 'all') {
@@ -324,7 +296,7 @@ export default function Home() {
              const firstAsset = newPlaylist[0];
              const firstUrl = await getAssetWithRetry(firstAsset);
              if (firstUrl) {
-                setCurrentMedia({ url: firstUrl, id: firstAsset.id, type: firstAsset.type, duration: firstAsset.type === 'VIDEO' ? parseDuration(firstAsset.duration) * 1000 : undefined });
+                setCurrentMedia({ url: firstUrl, id: firstAsset.id, type: 'IMAGE' });
              } else {
                  setAssetIndex(1); // Will be picked up by the other effect
              }
@@ -345,7 +317,7 @@ export default function Home() {
 
   // Asset rotation timer
   useEffect(() => {
-    if (isLoading || !currentMedia || currentMedia.type === 'VIDEO') return;
+    if (isLoading || !currentMedia) return;
 
     const timer = setTimeout(() => {
         advanceToNextAsset();
@@ -364,7 +336,7 @@ export default function Home() {
     
     setProgress(0);
     
-    const displayDuration = currentMedia.type === 'VIDEO' ? (currentMedia.duration || DURATION) : DURATION;
+    const displayDuration = DURATION;
 
     const interval = setInterval(() => {
       setProgress(p => Math.min(p + (100 / (displayDuration / 100)), 100));
@@ -483,7 +455,7 @@ export default function Home() {
           <AlertTriangle className="h-4 w-4" />
           <AlertTitle>No Media To Display</AlertTitle>
           <AlertDescription>
-            Could not find any suitable photos or videos on your Immich server. Check your configuration.
+            Could not find any suitable photos on your Immich server. Check your configuration.
           </AlertDescription>
         </Alert>
       </div>
@@ -515,18 +487,6 @@ export default function Home() {
         className: cn("transition-opacity duration-500", isFading ? 'opacity-0' : 'opacity-100')
     };
     
-    if (media.type === 'VIDEO') {
-        return (
-            <video
-                {...commonProps}
-                ref={videoRef}
-                autoPlay
-                muted
-                onEnded={advanceToNextAsset}
-                className={cn(commonProps.className, "object-contain w-full h-full")}
-            />
-        )
-    }
     return (
         <>
             <Image
