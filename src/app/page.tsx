@@ -123,7 +123,7 @@ export default function Home() {
   // --- Asset Fetching Logic ---
   const getAssetUrl = useCallback(async (asset: ImmichAsset): Promise<string | null> => {
     if (configError) return null;
-    const endpoint = asset.type === 'VIDEO' ? 'video' : 'thumbnail';
+    const endpoint = asset.type === 'VIDEO' ? 'download' : 'thumbnail';
     const sizeParam = asset.type === 'VIDEO' ? '' : '?size=preview';
     
     try {
@@ -332,10 +332,8 @@ export default function Home() {
     const currentMedia = isAVisible ? mediaA : mediaB;
 
     if (currentMedia?.type === 'VIDEO') {
-        const asset = playlist.find(p => p.id === currentMedia.id);
-        if (asset) {
-            displayDuration = parseDuration(asset.duration) * 1000;
-        }
+        // Don't auto-advance for videos with controls
+        return;
     }
 
     const timer = setTimeout(() => {
@@ -388,10 +386,9 @@ export default function Home() {
     const currentMedia = isAVisible ? mediaA : mediaB;
 
     if (currentMedia?.type === 'VIDEO') {
-        const asset = playlist.find(p => p.id === currentMedia.id);
-        if (asset) {
-            displayDuration = parseDuration(asset.duration) * 1000;
-        }
+        // No progress bar for videos with controls
+        setProgress(100);
+        return;
     }
     
     const interval = setInterval(() => {
@@ -527,9 +524,7 @@ export default function Home() {
                 <video
                     key={media.id}
                     src={media.url}
-                    autoPlay
-                    muted
-                    loop
+                    controls
                     playsInline
                     className="object-contain w-full h-full"
                 />
@@ -662,5 +657,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
