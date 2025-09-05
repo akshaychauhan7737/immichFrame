@@ -114,7 +114,11 @@ export default function Home() {
     return null;
   }, []);
   
-  const currentAsset = useMemo(() => playlist[assetIndex], [playlist, assetIndex]);
+  const currentAsset = useMemo(() => {
+    const currentMedia = isAVisible ? mediaA : mediaB;
+    if (!currentMedia) return null;
+    return playlist.find(p => p.id === currentMedia.id);
+  }, [playlist, isAVisible, mediaA, mediaB]);
 
   // --- Asset Fetching Logic ---
   const getAssetUrl = useCallback(async (asset: ImmichAsset): Promise<string | null> => {
@@ -167,15 +171,14 @@ export default function Home() {
 
   const loadNextAsset = useCallback(async () => {
     let nextIndex = assetIndex + 1;
-
-    // If we're near the end of the playlist, fetch more assets
-    if (nextIndex >= playlist.length - 5) {
-      setFetchPage(p => p + 1);
-    }
     
-    // If we've reached the end, loop back
     if (nextIndex >= playlist.length) {
       nextIndex = 0;
+    }
+
+    // If we're near the end of the playlist, start fetching the next page
+    if (playlist.length - nextIndex < 5) {
+      setFetchPage(p => p + 1);
     }
 
     const nextAsset = playlist[nextIndex];
@@ -193,7 +196,7 @@ export default function Home() {
       setAssetIndex(nextIndex);
     } else {
       // If asset fails to load, try the next one immediately
-      setAssetIndex(i => i + 1);
+      setAssetIndex(i => (i + 1) % playlist.length);
     }
   }, [assetIndex, playlist, getAssetWithRetry, isAVisible]);
 
@@ -225,7 +228,7 @@ export default function Home() {
     }
 
     const fetchAssets = async () => {
-      if(fetchPage === 1) setIsLoading(true);
+      if(fetchPage === 1 && playlist.length === 0) setIsLoading(true);
       setError(null);
       
       try {
@@ -252,7 +255,7 @@ export default function Home() {
         const data = await response.json();
         const fetchedAssets: ImmichAsset[] = data.assets.items;
         
-        if (fetchPage === 1 && fetchedAssets.length === 0) {
+        if (playlist.length === 0 && fetchedAssets.length === 0) {
           setError(`No photos/videos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
           setIsLoading(false);
           return;
@@ -287,20 +290,28 @@ export default function Home() {
         });
 
         const newPlaylist = fetchPage === 1 ? shuffleArray(filteredAssets) : [...playlist, ...shuffleArray(filteredAssets)];
-        setPlaylist(newPlaylist);
 
-        if (fetchPage === 1 && newPlaylist.length > 0) {
-            const firstAsset = newPlaylist[0];
-            const firstUrl = await getAssetWithRetry(firstAsset);
-            if (firstUrl) {
-                setMediaA({ url: firstUrl, id: firstAsset.id, type: firstAsset.type });
-                setMediaB(null);
-                setIsAVisible(true);
-            } else {
-                // If first asset fails, try the next one
-                setAssetIndex(1);
-            }
-        }
+        if (playlist.length === 0 && newPlaylist.length > 0) {
+             setPlaylist(newPlaylist);
+             const firstAsset = newPlaylist[0];
+             const firstUrl = await getAssetWithRetry(firstAsset);
+             if (firstUrl) {
+                 setMediaA({ url: firstUrl, id: firstAsset.id, type: firstAsset.type });
+                 setIsAVisible(true);
+
+                 if (newPlaylist.length > 1) {
+                    const secondAsset = newPlaylist[1];
+                    const secondUrl = await getAssetWithRetry(secondAsset);
+                    if (secondUrl) {
+                        setMediaB({ url: secondUrl, id: secondAsset.id, type: secondAsset.type });
+                    }
+                 }
+             } else {
+                 setAssetIndex(1); // Try the next one
+             }
+         } else {
+            setPlaylist(newPlaylist);
+         }
         
       } catch (e: any) {
           setError(`Failed to connect to Immich server: ${e.message}`);
@@ -315,10 +326,11 @@ export default function Home() {
 
   // Asset rotation timer
   useEffect(() => {
-    if (playlist.length === 0 || isLoading || error) return;
+    if (!mediaA && !mediaB) return;
     
     let displayDuration = DURATION;
     const currentMedia = isAVisible ? mediaA : mediaB;
+
     if (currentMedia?.type === 'VIDEO') {
         const asset = playlist.find(p => p.id === currentMedia.id);
         if (asset) {
@@ -327,42 +339,54 @@ export default function Home() {
     }
 
     const timer = setTimeout(() => {
-      loadNextAsset();
+        const nextMediaExists = isAVisible ? mediaB : mediaA;
+        if(nextMediaExists) {
+            setIsAVisible(v => !v);
+        } else {
+            // This might happen on the first run if the second image is still loading
+            // Or if an asset failed to load.
+            loadNextAsset();
+        }
     }, displayDuration);
 
     return () => clearTimeout(timer);
-  }, [assetIndex, playlist, isLoading, error, loadNextAsset, isAVisible, mediaA, mediaB]);
+  }, [isAVisible, mediaA, mediaB, playlist, loadNextAsset]);
   
-  // When next media is loaded, trigger the visibility switch
+  // Post-transition logic
   useEffect(() => {
-    if (!nextMediaLoaded) return;
-    
-    const newIsAVisible = !isAVisible;
-    setIsAVisible(newIsAVisible);
-    setNextMediaLoaded(false);
+    if (isLoading) return;
 
-    // After the transition starts, clean up the old media's Object URL
-    setTimeout(() => {
-        const oldMedia = newIsAVisible ? mediaB : mediaA;
+    // After the transition completes, load the next asset into the now-hidden container
+    // And clean up the old asset's Object URL
+    const transitionDelay = 1000; // Matches CSS transition
+    const timer = setTimeout(() => {
+        const oldMedia = isAVisible ? mediaB : mediaA;
         if(oldMedia?.url) URL.revokeObjectURL(oldMedia.url);
 
-        if (newIsAVisible) { 
+        if (isAVisible) {
             setMediaB(null);
         } else {
             setMediaA(null);
         }
-    }, 1000); // This should match the CSS transition duration
+        
+        loadNextAsset();
 
-  }, [nextMediaLoaded, isAVisible, mediaA, mediaB]);
+    }, transitionDelay);
+
+    return () => clearTimeout(timer);
+
+  }, [isAVisible, isLoading, loadNextAsset]);
 
 
   // Progress bar animation
   useEffect(() => {
-    if (isLoading || error || playlist.length === 0) return;
+    if (isLoading || error || (!mediaA && !mediaB)) return;
+    
     setProgress(0);
 
     let displayDuration = DURATION;
     const currentMedia = isAVisible ? mediaA : mediaB;
+
     if (currentMedia?.type === 'VIDEO') {
         const asset = playlist.find(p => p.id === currentMedia.id);
         if (asset) {
@@ -374,7 +398,7 @@ export default function Home() {
       setProgress(p => Math.min(p + (100 / (displayDuration / 100)), 100));
     }, 100);
     return () => clearInterval(interval);
-  }, [assetIndex, isLoading, error, playlist, isAVisible, mediaA, mediaB]); 
+  }, [isAVisible, mediaA, mediaB, isLoading, error, playlist]); 
 
   // Clock
   useEffect(() => {
@@ -508,7 +532,6 @@ export default function Home() {
                     loop
                     playsInline
                     className="object-contain w-full h-full"
-                    onLoadedData={() => setNextMediaLoaded(true)}
                 />
             </>
         )
@@ -530,7 +553,6 @@ export default function Home() {
                 alt="Immich Photo"
                 fill
                 className="object-contain"
-                onLoad={() => setNextMediaLoaded(true)}
                 priority
             />
         </>
@@ -640,3 +662,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
