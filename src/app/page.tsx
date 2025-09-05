@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, AlertTriangle, MapPin, Calendar, Folder, Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind, Droplets, Thermometer } from 'lucide-react';
+import { Loader2, AlertTriangle, MapPin, Calendar, Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind, Droplets, Thermometer } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -82,6 +82,7 @@ type MediaAsset = {
   id: string;
   url: string;
   type: 'IMAGE' | 'VIDEO';
+  duration?: number;
 };
 
 export default function Home() {
@@ -102,7 +103,8 @@ export default function Home() {
   const [mediaA, setMediaA] = useState<MediaAsset | null>(null);
   const [mediaB, setMediaB] = useState<MediaAsset | null>(null);
   const [isAVisible, setIsAVisible] = useState(true);
-  const [nextMediaLoaded, setNextMediaLoaded] = useState(false);
+  
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const configError = useMemo(() => {
     if (!SERVER_URL_CONFIGURED || !API_KEY) {
@@ -114,11 +116,12 @@ export default function Home() {
     return null;
   }, []);
   
+  const currentMedia = useMemo(() => isAVisible ? mediaA : mediaB, [isAVisible, mediaA, mediaB]);
+
   const currentAsset = useMemo(() => {
-    const currentMedia = isAVisible ? mediaA : mediaB;
     if (!currentMedia) return null;
     return playlist.find(p => p.id === currentMedia.id);
-  }, [playlist, isAVisible, mediaA, mediaB]);
+  }, [playlist, currentMedia]);
 
   // --- Asset Fetching Logic ---
   const getAssetUrl = useCallback(async (asset: ImmichAsset): Promise<string | null> => {
@@ -168,16 +171,18 @@ export default function Home() {
       return null;
   }, [getAssetUrl, toast]);
 
+  const advanceToNextAsset = useCallback(() => {
+      const nextMediaExists = isAVisible ? mediaB : mediaA;
+      if (nextMediaExists) {
+        setIsAVisible(v => !v);
+      }
+  }, [isAVisible, mediaA, mediaB]);
 
-  const loadNextAsset = useCallback(async () => {
-    let nextIndex = assetIndex + 1;
+  const loadNextAssetIntoBuffer = useCallback(async () => {
+    let nextIndex = (assetIndex + 1) % playlist.length;
     
-    if (nextIndex >= playlist.length) {
-      nextIndex = 0;
-    }
-
     // If we're near the end of the playlist, start fetching the next page
-    if (playlist.length - nextIndex < 5) {
+    if (playlist.length - nextIndex < 5 && playlist.length >= ASSET_FETCH_PAGE_SIZE) {
       setFetchPage(p => p + 1);
     }
 
@@ -187,7 +192,12 @@ export default function Home() {
     const newUrl = await getAssetWithRetry(nextAsset);
 
     if (newUrl) {
-      const newMedia: MediaAsset = { url: newUrl, id: nextAsset.id, type: nextAsset.type };
+      const newMedia: MediaAsset = { 
+          url: newUrl, 
+          id: nextAsset.id, 
+          type: nextAsset.type,
+          duration: nextAsset.type === 'VIDEO' ? parseDuration(nextAsset.duration) * 1000 : undefined
+      };
       if (isAVisible) {
         setMediaB(newMedia);
       } else {
@@ -284,7 +294,8 @@ export default function Home() {
                     if (DISPLAY_MODE === 'landscape') return width > height;
                     if (DISPLAY_MODE === 'portrait') return height > width;
                 }
-                return false;
+                // Fallback for assets without EXIF data
+                return DISPLAY_MODE === 'landscape'; 
             }
             return true;
         });
@@ -296,14 +307,14 @@ export default function Home() {
              const firstAsset = newPlaylist[0];
              const firstUrl = await getAssetWithRetry(firstAsset);
              if (firstUrl) {
-                 setMediaA({ url: firstUrl, id: firstAsset.id, type: firstAsset.type });
+                 setMediaA({ url: firstUrl, id: firstAsset.id, type: firstAsset.type, duration: firstAsset.type === 'VIDEO' ? parseDuration(firstAsset.duration) * 1000 : undefined });
                  setIsAVisible(true);
 
                  if (newPlaylist.length > 1) {
                     const secondAsset = newPlaylist[1];
                     const secondUrl = await getAssetWithRetry(secondAsset);
                     if (secondUrl) {
-                        setMediaB({ url: secondUrl, id: secondAsset.id, type: secondAsset.type });
+                        setMediaB({ url: secondUrl, id: secondAsset.id, type: secondAsset.type, duration: secondAsset.type === 'VIDEO' ? parseDuration(secondAsset.duration) * 1000 : undefined });
                     }
                  }
              } else {
@@ -324,39 +335,24 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configError, fetchPage]);
 
-  // Asset rotation timer
+  // Image rotation timer
   useEffect(() => {
-    if (!mediaA && !mediaB) return;
-    
-    let displayDuration = DURATION;
-    const currentMedia = isAVisible ? mediaA : mediaB;
-
-    if (currentMedia?.type === 'VIDEO') {
-        // Don't auto-advance for videos with controls
-        return;
-    }
+    if (!currentMedia || currentMedia.type === 'VIDEO') return;
 
     const timer = setTimeout(() => {
-        const nextMediaExists = isAVisible ? mediaB : mediaA;
-        if(nextMediaExists) {
-            setIsAVisible(v => !v);
-        } else {
-            // This might happen on the first run if the second image is still loading
-            // Or if an asset failed to load.
-            loadNextAsset();
-        }
-    }, displayDuration);
+        advanceToNextAsset();
+    }, DURATION);
 
     return () => clearTimeout(timer);
-  }, [isAVisible, mediaA, mediaB, playlist, loadNextAsset]);
+  }, [currentMedia, advanceToNextAsset]);
   
-  // Post-transition logic
+  // Post-transition logic: Load next asset into the hidden buffer
   useEffect(() => {
     if (isLoading) return;
 
-    // After the transition completes, load the next asset into the now-hidden container
+    // After the transition animation completes, load the next asset into the now-hidden container
     // And clean up the old asset's Object URL
-    const transitionDelay = 1000; // Matches CSS transition
+    const transitionDelay = 1000; // Matches CSS transition duration
     const timer = setTimeout(() => {
         const oldMedia = isAVisible ? mediaB : mediaA;
         if(oldMedia?.url) URL.revokeObjectURL(oldMedia.url);
@@ -367,35 +363,28 @@ export default function Home() {
             setMediaA(null);
         }
         
-        loadNextAsset();
+        loadNextAssetIntoBuffer();
 
     }, transitionDelay);
 
     return () => clearTimeout(timer);
 
-  }, [isAVisible, isLoading, loadNextAsset]);
+  }, [isAVisible, isLoading, loadNextAssetIntoBuffer]);
 
 
   // Progress bar animation
   useEffect(() => {
-    if (isLoading || error || (!mediaA && !mediaB)) return;
+    if (isLoading || error || !currentMedia) return;
     
     setProgress(0);
-
-    let displayDuration = DURATION;
-    const currentMedia = isAVisible ? mediaA : mediaB;
-
-    if (currentMedia?.type === 'VIDEO') {
-        // No progress bar for videos with controls
-        setProgress(100);
-        return;
-    }
     
+    const displayDuration = currentMedia.type === 'VIDEO' ? (currentMedia.duration || DURATION) : DURATION;
+
     const interval = setInterval(() => {
       setProgress(p => Math.min(p + (100 / (displayDuration / 100)), 100));
     }, 100);
     return () => clearInterval(interval);
-  }, [isAVisible, mediaA, mediaB, isLoading, error, playlist]); 
+  }, [currentMedia, isLoading, error]); 
 
   // Clock
   useEffect(() => {
@@ -423,7 +412,7 @@ export default function Home() {
                 feelsLike: Math.round(data.main.feels_like),
                 weatherCode: data.weather[0].id,
                 description: data.weather[0].description,
-                windSpeed: Math.round(data.wind.speed * 3.6),
+                windSpeed: Math.round(data.wind.speed * 3.6), // m/s to km/h
                 humidity: data.main.humidity,
             });
         } catch (e: any) {
@@ -515,17 +504,24 @@ export default function Home() {
   const weatherInfo = weather ? getWeatherInfo(weather.weatherCode) : null;
   const aqiInfo = airPollution ? getAqiInfo(airPollution.main.aqi) : null;
 
-  const renderMedia = (media: MediaAsset | null) => {
+  const renderMedia = (media: MediaAsset | null, isVisible: boolean) => {
     if (!media) return null;
+
+    const commonProps = {
+        key: media.id,
+        src: media.url,
+    };
+    
     if (media.type === 'VIDEO') {
         return (
             <>
-                {/* No background for videos as they fill the screen */}
                 <video
-                    key={media.id}
-                    src={media.url}
-                    controls
+                    {...commonProps}
+                    ref={isVisible ? videoRef : null}
+                    autoPlay
+                    muted
                     playsInline
+                    onEnded={advanceToNextAsset}
                     className="object-contain w-full h-full"
                 />
             </>
@@ -543,8 +539,7 @@ export default function Home() {
             />
             <div className="absolute inset-0 bg-black/50"></div>
             <Image
-                key={media.id}
-                src={media.url}
+                {...commonProps}
                 alt="Immich Photo"
                 fill
                 className="object-contain"
@@ -559,12 +554,12 @@ export default function Home() {
     <main className="relative h-screen w-screen overflow-hidden bg-black">
       {/* Media A Container */}
       <div className={cn('absolute inset-0 transition-opacity duration-1000 ease-in-out', isAVisible ? 'opacity-100' : 'opacity-0')}>
-        {renderMedia(mediaA)}
+        {renderMedia(mediaA, isAVisible)}
       </div>
 
       {/* Media B Container */}
       <div className={cn('absolute inset-0 transition-opacity duration-1000 ease-in-out', !isAVisible ? 'opacity-100' : 'opacity-0')}>
-        {renderMedia(mediaB)}
+        {renderMedia(mediaB, !isAVisible)}
       </div>
 
       {/* Top Left: Air Pollution */}
@@ -657,3 +652,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
