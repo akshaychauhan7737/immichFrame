@@ -126,7 +126,7 @@ export default function Home() {
     
     let url: string;
     if (asset.type === 'VIDEO') {
-        url = `${PROXY_URL}/asset/download?id=${asset.id}`;
+        url = `${PROXY_URL}/assets/${asset.id}/video/playback`;
     } else {
         url = `${PROXY_URL}/asset/${asset.id}/thumbnail?size=preview`;
     }
