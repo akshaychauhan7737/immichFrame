@@ -123,9 +123,13 @@ export default function Home() {
   // --- Asset Fetching Logic ---
   const getAssetUrl = useCallback(async (asset: ImmichAsset): Promise<string | null> => {
     if (configError) return null;
-    const endpoint = asset.type === 'VIDEO' ? 'download' : 'thumbnail';
-    const sizeParam = asset.type === 'IMAGE' ? '?size=preview' : '';
-    const url = `${PROXY_URL}/assets/${asset.id}/${endpoint}${sizeParam}`;
+    
+    let url: string;
+    if (asset.type === 'VIDEO') {
+        url = `${PROXY_URL}/asset/download?id=${asset.id}`;
+    } else {
+        url = `${PROXY_URL}/assets/${asset.id}/thumbnail?size=preview`;
+    }
 
     try {
       const res = await fetch(url, {
