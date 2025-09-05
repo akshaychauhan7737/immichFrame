@@ -517,7 +517,7 @@ export default function Home() {
                     }}
                     autoPlay
                     muted
-                    className={cn(commonProps.className, "object-contain h-full w-full")}
+                    className={cn(commonProps.className, "absolute object-contain h-full w-full")}
                 />
             </>
         )
