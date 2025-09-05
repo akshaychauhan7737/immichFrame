@@ -125,16 +125,20 @@ export default function Home() {
     if (configError) return null;
     
     let url: string;
+    let headers: HeadersInit;
+
     if (asset.type === 'VIDEO') {
         url = `${PROXY_URL}/assets/${asset.id}/video/playback`;
+        headers = { 'Authorization': `Bearer ${API_KEY as string}` };
     } else {
         url = `${PROXY_URL}/asset/${asset.id}/thumbnail?size=preview`;
+        headers = { 'x-api-key': API_KEY as string };
     }
 
     try {
       const res = await fetch(url, {
         method: 'GET',
-        headers: { 'x-api-key': API_KEY as string },
+        headers: headers,
       });
       if (!res.ok) {
         throw new Error(`Failed to fetch ${asset.type}: ${res.statusText}`);
