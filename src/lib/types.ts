@@ -15,12 +15,19 @@ export interface ImmichAsset {
   duration: string; // e.g., "00:00:09.123456"
   isArchived: boolean;
   exifInfo?: {
-    city?: string;
-    country?: string;
+    make?: string;
+    model?: string;
     exifImageWidth?: number;
     exifImageHeight?: number;
     dateTimeOriginal?: string;
     orientation?: number;
+    fNumber?: number;
+    focalLength?: number;
+    iso?: number;
+    exposureTime?: number;
+    lensModel?: string;
+    city?: string;
+    country?: string;
     [key: string]: any;
   }
 }

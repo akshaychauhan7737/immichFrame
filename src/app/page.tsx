@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, AlertTriangle, MapPin, Calendar, Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind, Droplets, Thermometer } from 'lucide-react';
+import { Loader2, AlertTriangle, MapPin, Calendar, Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind, Droplets, Thermometer, Camera, Aperture } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -369,7 +369,7 @@ export default function Home() {
 
     return () => clearTimeout(timer);
 
-  }, [isAVisible, isLoading, loadNextAssetIntoBuffer]);
+  }, [isAVisible, isLoading, loadNextAssetIntoBuffer, mediaA, mediaB]);
 
 
   // Progress bar animation
@@ -504,6 +504,14 @@ export default function Home() {
   const weatherInfo = weather ? getWeatherInfo(weather.weatherCode) : null;
   const aqiInfo = airPollution ? getAqiInfo(airPollution.main.aqi) : null;
 
+  const exif = currentAsset?.exifInfo;
+  const camera = [exif?.make, exif?.model].filter(Boolean).join(' ');
+  const exposure = [
+    exif?.fNumber ? `ƒ/${exif.fNumber}` : null,
+    exif?.exposureTime ? `1/${Math.round(1 / exif.exposureTime)}s` : null,
+    exif?.iso ? `ISO ${exif.iso}` : null,
+  ].filter(Boolean).join(' • ');
+
   const renderMedia = (media: MediaAsset | null, isVisible: boolean) => {
     if (!media) return null;
 
@@ -520,7 +528,6 @@ export default function Home() {
                     ref={isVisible ? videoRef : null}
                     autoPlay
                     muted
-                    playsInline
                     onEnded={advanceToNextAsset}
                     className="object-contain w-full h-full"
                 />
@@ -630,8 +637,8 @@ export default function Home() {
         </div>
 
         {/* Right Box: Photo Details */}
-        {(isDateValid || location) && (
-          <div className="space-y-1.5 rounded-lg bg-black/30 p-4 backdrop-blur-sm text-right">
+        {(isDateValid || location || camera || exif?.lensModel) && (
+          <div className="space-y-1.5 rounded-lg bg-black/30 p-4 backdrop-blur-sm text-right max-w-sm">
               <div className="flex flex-col items-end text-lg md:text-xl font-medium">
                   {isDateValid && photoDate && (
                        <div className="flex items-center gap-2 text-base text-white/90">
@@ -643,6 +650,23 @@ export default function Home() {
                       <div className="flex items-center gap-2 text-base text-white/90">
                           <span>{location}</span>
                           <MapPin size={18} className="shrink-0" />
+                      </div>
+                  )}
+                   {camera && (
+                      <div className="flex items-center gap-2 text-base text-white/90">
+                          <span className='truncate'>{camera}</span>
+                          <Camera size={18} className="shrink-0" />
+                      </div>
+                  )}
+                   {exif?.lensModel && (
+                      <div className="flex items-center gap-2 text-base text-white/90">
+                          <span className='truncate'>{exif.lensModel}</span>
+                          <Aperture size={18} className="shrink-0" />
+                      </div>
+                  )}
+                  {exposure && (
+                      <div className="flex items-center gap-2 text-sm text-white/80 pt-1">
+                          <span>{exposure}</span>
                       </div>
                   )}
               </div>
