@@ -308,38 +308,43 @@ export default function Home() {
   // Initial asset load and starting the slideshow
   useEffect(() => {
       const startSlideshow = async () => {
-          if (playlist.length === 0) return;
+          if (playlist.length < 1) return;
 
-          // Preload first asset
           let assetsForFirstLoad = [...playlist];
-          let firstMedia: MediaAsset | null = null;
-          while(!firstMedia && assetsForFirstLoad.length > 0) {
-              const asset = assetsForFirstLoad.shift();
-              if (asset) firstMedia = await getAssetWithRetry(asset);
+          
+          // 1. Set current media if it's not set
+          if (!currentMedia) {
+              let firstMedia: MediaAsset | null = null;
+              while(!firstMedia && assetsForFirstLoad.length > 0) {
+                  const asset = assetsForFirstLoad.shift();
+                  if (asset) firstMedia = await getAssetWithRetry(asset);
+              }
+
+              if (firstMedia) {
+                  setCurrentMedia(firstMedia);
+                   if (firstMedia.asset.createdAt) {
+                        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, firstMedia.asset.createdAt);
+                   }
+              } else {
+                   setError("Failed to load initial asset(s).");
+                   setIsLoading(false);
+                   return;
+              }
           }
 
-          if (!firstMedia) {
-              setError("Failed to load initial asset.");
-              setIsLoading(false);
-              return;
+          // 2. Set next media if it's not set
+          if (!nextMedia) {
+              const remainingAssets = await preloadNextAsset(assetsForFirstLoad);
+              setPlaylist(remainingAssets);
           }
-
-          // Preload second asset
-          const remainingAssets = await preloadNextAsset(assetsForFirstLoad);
-
-          // Start the show
-          setCurrentMedia(firstMedia);
-          if (firstMedia.asset.createdAt) {
-              localStorage.setItem(LOCAL_STORAGE_DATE_KEY, firstMedia.asset.createdAt);
-          }
-          setPlaylist(remainingAssets);
+          
           setIsLoading(false);
       };
 
-      if (!isLoading && !currentMedia && playlist.length > 0) {
+      if (!isLoading && playlist.length > 0 && (!currentMedia || !nextMedia)) {
           startSlideshow();
       }
-  }, [isLoading, currentMedia, playlist, getAssetWithRetry, preloadNextAsset]);
+  }, [isLoading, currentMedia, nextMedia, playlist, getAssetWithRetry, preloadNextAsset]);
 
 
   // Asset rotation timer for images
