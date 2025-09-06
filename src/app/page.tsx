@@ -20,6 +20,7 @@ const RETRY_DELAY = 5000; // 5 seconds
 const WEATHER_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const AIR_POLLUTION_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const ASSET_FETCH_PAGE_SIZE = 25;
+const PLAYLIST_FETCH_THRESHOLD = 5; // Fetch more when playlist drops to this size
 const LOCAL_STORAGE_DATE_KEY = 'immich-view-taken-before';
 
 // --- Environment Variable-based Configuration ---
@@ -82,6 +83,7 @@ export default function Home() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [airPollution, setAirPollution] = useState<AirPollutionData | null>(null);
   const [currentMedia, setCurrentMedia] = useState<MediaAsset | null>(null);
+  const [nextMedia, setNextMedia] = useState<MediaAsset | null>(null);
   const [isFading, setIsFading] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
 
@@ -158,44 +160,57 @@ export default function Home() {
       return null;
   }, [getAssetUrl, toast]);
 
+  const preloadNextAsset = useCallback(async (currentPlaylist: ImmichAsset[]) => {
+    const mutablePlaylist = [...currentPlaylist];
+    let nextAssetToLoad = mutablePlaylist.shift();
+
+    if (!nextAssetToLoad) {
+      setNextMedia(null); // No more assets in playlist
+      return mutablePlaylist;
+    }
+  
+    const newMedia = await getAssetWithRetry(nextAssetToLoad);
+    
+    if (newMedia) {
+      setNextMedia(newMedia);
+    } else {
+      // If loading fails, recursively try the next one
+      return await preloadNextAsset(mutablePlaylist);
+    }
+    return mutablePlaylist;
+
+  }, [getAssetWithRetry]);
+
 
   const advanceToNextAsset = useCallback(async () => {
-    if (isFetching) return;
-  
-    // Take a mutable copy of the playlist
-    const newPlaylist = [...playlist];
-    let nextAssetToLoad = newPlaylist.shift();
-  
-    // If we've run out of assets in the playlist, trigger a fetch and stop for now.
-    // The useEffect hook will handle picking up when the fetch is done.
-    if (!nextAssetToLoad) {
-      if (!isFetching) setIsFetching(true);
+    if (!nextMedia) {
+      console.log("Next media not ready, will trigger fetch if playlist is low.");
+      // Trigger a fetch if the playlist is exhausted
+      if (playlist.length === 0 && !isFetching) {
+          setIsFetching(true);
+      }
       return;
     }
   
     setIsFading(true);
     await delay(500); // Wait for fade-out
   
-    const oldUrl = currentMedia?.url;
+    const oldMediaUrl = currentMedia?.url;
   
-    // Try to load the next asset
-    const newMedia = await getAssetWithRetry(nextAssetToLoad);
+    // Promote next to current
+    setCurrentMedia(nextMedia);
   
-    if (oldUrl) {
-      URL.revokeObjectURL(oldUrl);
+    // Preload the next asset and update the playlist
+    const updatedPlaylist = await preloadNextAsset(playlist);
+    setPlaylist(updatedPlaylist);
+  
+    // Revoke the old URL after the transition
+    if (oldMediaUrl) {
+      URL.revokeObjectURL(oldMediaUrl);
     }
-  
-    setCurrentMedia(newMedia);
-    setPlaylist(newPlaylist); // Update the playlist state
   
     setIsFading(false);
-  
-    // If loading failed, immediately try the next one
-    if (!newMedia) {
-      console.log("Failed to load asset, trying next one immediately.");
-      advanceToNextAsset();
-    }
-  }, [playlist, isFetching, getAssetWithRetry, currentMedia?.url]);
+  }, [nextMedia, playlist, currentMedia?.url, preloadNextAsset, isFetching]);
 
 
   // --- Effects ---
@@ -296,28 +311,30 @@ export default function Home() {
     const startSlideshow = async () => {
         if (!isLoading || playlist.length === 0 || currentMedia) return;
 
-        let assetsForFirstLoad = [...playlist];
-        let firstMedia: MediaAsset | null = null;
+        let mutablePlaylist = [...playlist];
         
-        while(!firstMedia && assetsForFirstLoad.length > 0) {
-            const asset = assetsForFirstLoad.shift();
-            if (asset) {
-                firstMedia = await getAssetWithRetry(asset);
-            }
+        // Load current
+        const firstAssetToLoad = mutablePlaylist.shift();
+        if (firstAssetToLoad) {
+            const firstMedia = await getAssetWithRetry(firstAssetToLoad);
+            setCurrentMedia(firstMedia);
+        } else {
+            setError("Failed to load any initial assets.");
+            setIsLoading(false);
+            return;
         }
 
-        if (firstMedia) {
-            setCurrentMedia(firstMedia);
-            setPlaylist(assetsForFirstLoad);
-        } else {
-             setError("Failed to load any initial assets. Please check your connection and filters.");
-        }
-        
+        // Preload next and update playlist
+        const updatedPlaylist = await preloadNextAsset(mutablePlaylist);
+        setPlaylist(updatedPlaylist);
+
         setIsLoading(false);
     };
 
-    startSlideshow();
-  }, [isLoading, currentMedia, playlist, getAssetWithRetry]);
+    if (playlist.length > 0 && isLoading) {
+      startSlideshow();
+    }
+  }, [isLoading, currentMedia, playlist, getAssetWithRetry, preloadNextAsset]);
 
 
   // Asset rotation timer for images
@@ -331,12 +348,19 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [isLoading, currentMedia, advanceToNextAsset]);
   
+  // Fetch more assets when playlist runs low
+  useEffect(() => {
+    if (!isFetching && playlist.length > 0 && playlist.length < PLAYLIST_FETCH_THRESHOLD) {
+      setIsFetching(true);
+    }
+  }, [playlist.length, isFetching]);
 
   const handleDateReset = useCallback(() => {
     localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
     setTakenBefore(null);
     setPlaylist([]);
     setCurrentMedia(null);
+    setNextMedia(null);
     setIsLoading(true);
     setIsFetching(true);
     toast({
@@ -355,6 +379,7 @@ export default function Home() {
         setTakenBefore(newDate);
         setPlaylist([]);
         setCurrentMedia(null);
+        setNextMedia(null);
         setIsLoading(true);
         setIsFetching(true); // This will trigger the fetchAssets effect
         
@@ -487,7 +512,7 @@ export default function Home() {
   }
   
   const location = currentAsset?.exifInfo?.city;
-  const dateString = currentAsset?.exifInfo?.dateTimeOriginal;
+  const dateString = currentAsset?.fileCreatedAt;
   const photoDate = dateString ? new Date(dateString) : null;
   const isDateValid = photoDate && !isNaN(photoDate.getTime());
   
@@ -575,7 +600,7 @@ export default function Home() {
           </Alert>
         </div>
       )}
-      {currentMedia && renderMedia(currentMedia)}
+      {renderMedia(currentMedia)}
 
       {/* Top Left: Air Pollution */}
       {airPollution && aqiInfo && (
