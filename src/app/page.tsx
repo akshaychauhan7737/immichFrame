@@ -510,7 +510,7 @@ export default function Home() {
     );
   }
   
-  const location = [currentAsset?.exifInfo?.city, currentAsset?.exifInfo?.country].filter(Boolean).join(', ');
+  const location = currentAsset?.exifInfo?.city;
   const dateString = currentAsset?.exifInfo?.dateTimeOriginal;
   const photoDate = dateString ? new Date(dateString) : null;
   const isDateValid = photoDate && !isNaN(photoDate.getTime());
@@ -704,7 +704,7 @@ export default function Home() {
 
 
         {/* Right Box: Photo Details */}
-        {currentAsset && (isDateValid || location || camera || exif?.lensModel) && (
+        {currentAsset && (isDateValid || location || camera || exposure) && (
           <div className="space-y-1.5 rounded-lg bg-black/30 p-4 backdrop-blur-sm text-right max-w-sm">
               <div className="flex flex-col items-end text-lg md:text-xl font-medium">
                   {isDateValid && photoDate && (
@@ -725,15 +725,10 @@ export default function Home() {
                           <Camera size={18} className="shrink-0" />
                       </div>
                   )}
-                   {exif?.lensModel && (
-                      <div className="flex items-center gap-2 text-base text-white/90">
-                          <span className='truncate'>{exif.lensModel}</span>
-                          <Aperture size={18} className="shrink-0" />
-                      </div>
-                  )}
-                  {exposure && (
+                   {exposure && (
                       <div className="flex items-center gap-2 text-sm text-white/80 pt-1">
                           <span>{exposure}</span>
+                          <Aperture size={18} className="shrink-0" />
                       </div>
                   )}
               </div>
@@ -743,5 +738,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
