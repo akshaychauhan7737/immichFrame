@@ -226,6 +226,8 @@ export default function Home() {
   useEffect(() => {
     if (fetchPage > 1) { // Don't save initial value
       localStorage.setItem(LOCAL_STORAGE_PAGE_KEY, fetchPage.toString());
+    } else {
+      localStorage.removeItem(LOCAL_STORAGE_PAGE_KEY);
     }
   }, [fetchPage]);
 
@@ -267,6 +269,14 @@ export default function Home() {
         const data = await response.json();
         const fetchedAssets: ImmichAsset[] = data.assets.items;
         
+        // If we fetched a page > 1 and got no assets, loop back to page 1
+        if (fetchedAssets.length === 0 && fetchPage > 1) {
+            setFetchPage(1); // This will trigger a re-fetch for page 1
+            setPlaylist([]); // Clear the old playlist
+            localStorage.removeItem(LOCAL_STORAGE_PAGE_KEY);
+            return;
+        }
+
         if (playlist.length === 0 && (!fetchedAssets || fetchedAssets.length === 0)) {
           setError(`No photos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
           setIsLoading(false);
@@ -662,5 +672,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
