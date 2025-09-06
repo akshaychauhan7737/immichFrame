@@ -34,8 +34,8 @@ const LATITUDE = process.env.NEXT_PUBLIC_LATITUDE;
 const LONGITUDE = process.env.NEXT_PUBLIC_LONGITUDE;
 const OPENWEATHER_API_KEY = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
 
-// We use a local proxy to avoid CORS issues for Immich.
-const PROXY_URL = '/api/immich';
+// Connect directly to the Immich API endpoint.
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_IMMICH_SERVER_URL}/api`;
 
 // --- Helper Functions ---
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -108,9 +108,9 @@ export default function Home() {
 
     let url: string;
     if (asset.type === 'VIDEO') {
-        url = `${PROXY_URL}/assets/${asset.id}/original`;
+        url = `${API_BASE_URL}/assets/${asset.id}/original`;
     } else { // IMAGE
-        url = `${PROXY_URL}/assets/${asset.id}/thumbnail?size=preview`;
+        url = `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview`;
     }
 
     const controller = new AbortController();
@@ -275,7 +275,7 @@ export default function Home() {
             requestBody.takenBefore = takenBefore;
         }
 
-        const response = await fetch(`${PROXY_URL}/search/metadata`, {
+        const response = await fetch(`${API_BASE_URL}/search/metadata`, {
           method: 'POST',
           headers: { 
             'x-api-key': API_KEY as string, 
@@ -757,8 +757,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
-
-
-
