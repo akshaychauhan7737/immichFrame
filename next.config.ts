@@ -34,13 +34,6 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/immich/:path*',
-        has: [
-          {
-            type: 'header',
-            key: 'x-api-key',
-            value: process.env.NEXT_PUBLIC_IMMICH_API_KEY,
-          },
-        ],
         destination: destination,
       },
     ];
