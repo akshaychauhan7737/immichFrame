@@ -37,15 +37,6 @@ const MAX_VIDEO_DURATION = parseInt(process.env.NEXT_PUBLIC_MAX_VIDEO_DURATION_S
 const PROXY_URL = '/api/immich';
 
 // --- Helper Functions ---
-function shuffleArray<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-}
-
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 function parseDuration(duration: string): number {
@@ -105,6 +96,7 @@ export default function Home() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [airPollution, setAirPollution] = useState<AirPollutionData | null>(null);
   const [currentMedia, setCurrentMedia] = useState<MediaAsset | null>(null);
+  const [nextMedia, setNextMedia] = useState<MediaAsset | null>(null);
   const [isFading, setIsFading] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
 
@@ -158,9 +150,13 @@ export default function Home() {
     }
   }, [configError, toast]);
   
-  const getAssetWithRetry = useCallback(async (asset: ImmichAsset, retries = 1): Promise<string | null> => {
+  const getAssetWithRetry = useCallback(async (asset: ImmichAsset, retries = 1): Promise<MediaAsset | null> => {
       let url = await getAssetUrl(asset);
-      if (url) return url;
+      if (url) return {
+          id: asset.id,
+          type: asset.type as 'IMAGE' | 'VIDEO',
+          url: url,
+      };
       
       if (retries > 0) {
           toast({
@@ -179,6 +175,27 @@ export default function Home() {
       return null;
   }, [getAssetUrl, toast]);
 
+    const preloadNextAsset = useCallback(async (index: number) => {
+        if (playlist.length === 0) return;
+
+        let attempts = 0;
+        let preloadedAsset: MediaAsset | null = null;
+        
+        while (!preloadedAsset && attempts < playlist.length) {
+            const nextIndex = (index + 1 + attempts) % playlist.length;
+            const nextAsset = playlist[nextIndex];
+            if (nextAsset) {
+                preloadedAsset = await getAssetWithRetry(nextAsset);
+            }
+            if (!preloadedAsset) {
+                attempts++;
+            }
+        }
+        
+        setNextMedia(preloadedAsset);
+
+    }, [playlist, getAssetWithRetry]);
+
   const advanceToNextAsset = useCallback(async () => {
     if (playlist.length === 0) return;
 
@@ -188,49 +205,52 @@ export default function Home() {
     if (currentMedia?.url) {
         URL.revokeObjectURL(currentMedia.url);
     }
-    
+
     // If we're near the end of the current playlist, start fetching the next page.
     if (playlist.length > 0 && assetIndex === playlist.length - 5 && !isFetching) {
         setIsFetching(true); // Trigger fetch
     }
     
-    const nextIndex = (assetIndex + 1) % playlist.length;
-    setAssetIndex(nextIndex);
-    
-    let nextAsset = playlist[nextIndex];
-    let newUrl = null;
-    let attempts = 0;
-
-    // Loop to find a loadable asset
-    while(!newUrl && attempts < playlist.length) {
-        const potentialNextIndex = (nextIndex + attempts) % playlist.length;
-        nextAsset = playlist[potentialNextIndex];
-
-        if (nextAsset) {
-            newUrl = await getAssetWithRetry(nextAsset);
-        }
-
-        if (!newUrl) {
-            // If loading fails, just increment attempts and loop.
-            // The index will be set correctly outside the loop.
-            attempts++;
-        }
-    }
-    
-    if (newUrl && nextAsset) {
-        setCurrentMedia({ 
-            url: newUrl, 
-            id: nextAsset.id, 
-            type: nextAsset.type as 'IMAGE' | 'VIDEO',
-        });
-        setAssetIndex((nextIndex + attempts) % playlist.length);
+    if (nextMedia) {
+        const nextIndex = playlist.findIndex(asset => asset.id === nextMedia.id);
+        setCurrentMedia(nextMedia);
+        setAssetIndex(nextIndex >= 0 ? nextIndex : (assetIndex + 1) % playlist.length);
+        setNextMedia(null); // Clear preloaded
+        preloadNextAsset(nextIndex >= 0 ? nextIndex : (assetIndex + 1) % playlist.length); // Preload the *next* next one
     } else {
-        setError("Failed to load any assets from the playlist.");
-    }
+        // Fallback: if preloading failed or hasn't happened, load next one on the fly
+        const nextIndex = (assetIndex + 1) % playlist.length;
+        setAssetIndex(nextIndex);
+        
+        let nextAsset = playlist[nextIndex];
+        let newAsset: MediaAsset | null = null;
+        let attempts = 0;
 
+        while(!newAsset && attempts < playlist.length) {
+            const potentialNextIndex = (nextIndex + attempts) % playlist.length;
+            nextAsset = playlist[potentialNextIndex];
+
+            if (nextAsset) {
+                newAsset = await getAssetWithRetry(nextAsset);
+            }
+
+            if (!newAsset) {
+                attempts++;
+            }
+        }
+        
+        if (newAsset) {
+            setCurrentMedia(newAsset);
+            setAssetIndex((nextIndex + attempts) % playlist.length);
+            preloadNextAsset((nextIndex + attempts) % playlist.length);
+        } else {
+            setError("Failed to load any assets from the playlist.");
+        }
+    }
+    
     setIsFading(false);
 
-}, [assetIndex, playlist, getAssetWithRetry, currentMedia, isFetching]);
+}, [assetIndex, playlist, getAssetWithRetry, currentMedia, isFetching, nextMedia, preloadNextAsset]);
 
 
   // --- Effects ---
@@ -257,6 +277,7 @@ export default function Home() {
     setPlaylist([]);
     setAssetIndex(0);
     setCurrentMedia(null);
+    setNextMedia(null);
     setIsFetching(true); // Trigger a re-fetch from the beginning
     toast({
         title: "Timeline Reset",
@@ -270,6 +291,7 @@ export default function Home() {
         setPlaylist([]);
         setAssetIndex(0);
         setCurrentMedia(null);
+        setNextMedia(null);
         setIsFetching(true); // Trigger a re-fetch from the selected date
         toast({
             title: "Timeline Set",
@@ -363,7 +385,7 @@ export default function Home() {
         });
 
         if (filteredAssets.length > 0) {
-            const newPlaylist = [...playlist, ...shuffleArray(filteredAssets)];
+            const newPlaylist = [...playlist, ...filteredAssets];
             setPlaylist(newPlaylist);
         }
         
@@ -399,9 +421,10 @@ export default function Home() {
         const loadInitialAsset = async () => {
             const asset = playlist[0]; // Start with the first asset in shuffled list
             if (asset) {
-                const url = await getAssetWithRetry(asset);
-                if (url) {
-                    setCurrentMedia({ url, id: asset.id, type: asset.type as 'IMAGE' | 'VIDEO' });
+                const mediaAsset = await getAssetWithRetry(asset);
+                if (mediaAsset) {
+                    setCurrentMedia(mediaAsset);
+                    preloadNextAsset(0); // Preload the next one
                 } else {
                     // If first asset fails, try to advance
                     advanceToNextAsset();
@@ -410,7 +433,7 @@ export default function Home() {
         };
         loadInitialAsset();
     }
-  }, [isLoading, currentMedia, playlist, getAssetWithRetry, advanceToNextAsset]);
+  }, [isLoading, currentMedia, playlist, getAssetWithRetry, advanceToNextAsset, preloadNextAsset]);
 
 
   // Asset rotation timer for images
@@ -580,7 +603,7 @@ export default function Home() {
 
     if (media.type === 'VIDEO') {
         return (
-            <div key={media.id} className={cn("transition-opacity duration-500", isFading ? 'opacity-0' : 'opacity-100')}>
+            <div key={media.id} className={cn("absolute inset-0 transition-opacity duration-500", isFading ? 'opacity-0' : 'opacity-100')}>
                 <video
                     key={`${media.id}-bg`}
                     src={media.url}
@@ -615,14 +638,14 @@ export default function Home() {
     };
 
     return (
-        <>
+        <div className={cn("absolute inset-0", commonImageProps.className)}>
             <Image
                 key={`${media.id}-bg`}
                 src={media.url}
                 alt=""
                 aria-hidden="true"
                 fill
-                className={cn(commonImageProps.className, "object-cover blur-2xl scale-110")}
+                className="object-cover blur-2xl scale-110"
             />
             <div className="absolute inset-0 bg-black/50"></div>
             <Image
@@ -630,10 +653,10 @@ export default function Home() {
                 src={media.url}
                 alt="Immich Photo"
                 fill
-                className={cn(commonImageProps.className, "object-contain")}
+                className="object-contain"
                 priority
             />
-        </>
+        </div>
     );
   }
 
@@ -641,9 +664,7 @@ export default function Home() {
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-black">
       {/* Media Container */}
-      <div className='absolute inset-0'>
         {renderMedia(currentMedia)}
-      </div>
 
       {/* Top Left: Air Pollution */}
       {airPollution && aqiInfo && (
@@ -784,3 +805,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
