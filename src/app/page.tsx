@@ -82,7 +82,6 @@ export default function Home() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [airPollution, setAirPollution] = useState<AirPollutionData | null>(null);
   const [currentMedia, setCurrentMedia] = useState<MediaAsset | null>(null);
-  const [nextMedia, setNextMedia] = useState<MediaAsset | null>(null);
   const [isFading, setIsFading] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
 
@@ -160,49 +159,43 @@ export default function Home() {
   }, [getAssetUrl, toast]);
 
 
-  const preloadNextAsset = useCallback(async (assetList: ImmichAsset[]) => {
-      if (assetList.length === 0) {
-          setNextMedia(null);
-          return assetList;
-      }
-      
-      let nextAsset: ImmichAsset | undefined;
-      let preloadedMedia: MediaAsset | null = null;
-      let remainingAssets = [...assetList];
-
-      while (!preloadedMedia && remainingAssets.length > 0) {
-          nextAsset = remainingAssets.shift(); // Take asset from the front
-          if (nextAsset) {
-              preloadedMedia = await getAssetWithRetry(nextAsset);
-          }
-      }
-      
-      setNextMedia(preloadedMedia);
-      return remainingAssets; // Return the list without the preloaded asset
-  }, [getAssetWithRetry]);
-
-
   const advanceToNextAsset = useCallback(async () => {
-    if (!nextMedia) {
+    if (isFetching) return;
+  
+    // Take a mutable copy of the playlist
+    const newPlaylist = [...playlist];
+    let nextAssetToLoad = newPlaylist.shift();
+  
+    // If we've run out of assets in the playlist, trigger a fetch and stop for now.
+    // The useEffect hook will handle picking up when the fetch is done.
+    if (!nextAssetToLoad) {
       if (!isFetching) setIsFetching(true);
       return;
     }
-
+  
     setIsFading(true);
-    await delay(500);
-
-    if (currentMedia?.url) {
-        URL.revokeObjectURL(currentMedia.url);
+    await delay(500); // Wait for fade-out
+  
+    const oldUrl = currentMedia?.url;
+  
+    // Try to load the next asset
+    const newMedia = await getAssetWithRetry(nextAssetToLoad);
+  
+    if (oldUrl) {
+      URL.revokeObjectURL(oldUrl);
     }
-    
-    setCurrentMedia(nextMedia);
-    
-    // Preload the next asset and update the playlist
-    const remainingAssets = await preloadNextAsset(playlist);
-    setPlaylist(remainingAssets);
-
+  
+    setCurrentMedia(newMedia);
+    setPlaylist(newPlaylist); // Update the playlist state
+  
     setIsFading(false);
-  }, [nextMedia, currentMedia, playlist, preloadNextAsset, isFetching]);
+  
+    // If loading failed, immediately try the next one
+    if (!newMedia) {
+      console.log("Failed to load asset, trying next one immediately.");
+      advanceToNextAsset();
+    }
+  }, [playlist, isFetching, getAssetWithRetry, currentMedia?.url]);
 
 
   // --- Effects ---
@@ -298,49 +291,33 @@ export default function Home() {
     }
   }, [configError, isFetching, takenBefore]);
 
-  // Trigger fetch when playlist runs low
-  useEffect(() => {
-    // If we are not fetching, and the playlist is empty, and we are not in an error/loading state, fetch more.
-    if (!isFetching && playlist.length === 0 && !isLoading && !error) {
-      console.log("Playlist is empty, fetching more assets.");
-      setIsFetching(true);
-    }
-  }, [playlist.length, isFetching, isLoading, error]);
-
-
   // Initial asset load and starting the slideshow
   useEffect(() => {
-      const startSlideshow = async () => {
-          if (playlist.length < 1) return;
+    const startSlideshow = async () => {
+        if (!isLoading || playlist.length === 0 || currentMedia) return;
 
-          let assetsForFirstLoad = [...playlist];
-          
-          // 1. Set current media if it's not set
-          let firstMedia: MediaAsset | null = null;
-          while(!firstMedia && assetsForFirstLoad.length > 0) {
-              const asset = assetsForFirstLoad.shift();
-              if (asset) firstMedia = await getAssetWithRetry(asset);
-          }
+        let assetsForFirstLoad = [...playlist];
+        let firstMedia: MediaAsset | null = null;
+        
+        while(!firstMedia && assetsForFirstLoad.length > 0) {
+            const asset = assetsForFirstLoad.shift();
+            if (asset) {
+                firstMedia = await getAssetWithRetry(asset);
+            }
+        }
 
-          if (firstMedia) {
-              setCurrentMedia(firstMedia);
-          } else {
-               setError("Failed to load any initial assets. Please check your connection and filters.");
-               setIsLoading(false);
-               return;
-          }
+        if (firstMedia) {
+            setCurrentMedia(firstMedia);
+            setPlaylist(assetsForFirstLoad);
+        } else {
+             setError("Failed to load any initial assets. Please check your connection and filters.");
+        }
+        
+        setIsLoading(false);
+    };
 
-          // 2. Set next media
-          const remainingAssets = await preloadNextAsset(assetsForFirstLoad);
-          setPlaylist(remainingAssets);
-          
-          setIsLoading(false);
-      };
-
-      if (isLoading && playlist.length > 0 && !currentMedia) {
-          startSlideshow();
-      }
-  }, [isLoading, currentMedia, playlist, getAssetWithRetry, preloadNextAsset]);
+    startSlideshow();
+  }, [isLoading, currentMedia, playlist, getAssetWithRetry]);
 
 
   // Asset rotation timer for images
@@ -360,7 +337,6 @@ export default function Home() {
     setTakenBefore(null);
     setPlaylist([]);
     setCurrentMedia(null);
-    setNextMedia(null);
     setIsLoading(true);
     setIsFetching(true);
     toast({
@@ -379,7 +355,6 @@ export default function Home() {
         setTakenBefore(newDate);
         setPlaylist([]);
         setCurrentMedia(null);
-        setNextMedia(null);
         setIsLoading(true);
         setIsFetching(true); // This will trigger the fetchAssets effect
         
@@ -527,12 +502,12 @@ export default function Home() {
     exif?.iso ? `ISO ${exif.iso}` : null,
   ].filter(Boolean).join(' • ');
 
-  const renderMedia = (media: MediaAsset | null, isCurrent: boolean) => {
+  const renderMedia = (media: MediaAsset | null) => {
     if (!media) return null;
   
     const containerClasses = cn(
       "absolute inset-0 transition-opacity duration-500",
-      isCurrent && !isFading ? 'opacity-100' : 'opacity-0'
+      isFading ? 'opacity-0' : 'opacity-100'
     );
   
     if (media.type === 'VIDEO') {
@@ -600,8 +575,7 @@ export default function Home() {
           </Alert>
         </div>
       )}
-      {renderMedia(currentMedia, true)}
-      {renderMedia(nextMedia, false)}
+      {currentMedia && renderMedia(currentMedia)}
 
       {/* Top Left: Air Pollution */}
       {airPollution && aqiInfo && (
@@ -736,3 +710,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
