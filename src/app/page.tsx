@@ -107,8 +107,6 @@ export default function Home() {
     if (configError) return null;
 
     let url: string;
-    const headers: HeadersInit = { 'x-api-key': API_KEY as string };
-
     if (asset.type === 'VIDEO') {
         url = `${PROXY_URL}/assets/${asset.id}/original`;
     } else { // IMAGE
@@ -121,7 +119,7 @@ export default function Home() {
     try {
       const res = await fetch(url, {
         method: 'GET',
-        headers: headers,
+        headers: { 'x-api-key': API_KEY as string },
         signal: controller.signal
       });
 
@@ -330,8 +328,6 @@ export default function Home() {
     const startSlideshow = async () => {
         if (playlist.length === 0 || !isLoading) return;
 
-        setIsLoading(true);
-        
         let mutablePlaylist = [...playlist];
         
         // Load current
@@ -763,4 +759,5 @@ export default function Home() {
 }
 
     
+
 

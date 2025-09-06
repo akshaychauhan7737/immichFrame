@@ -26,7 +26,7 @@ const nextConfig: NextConfig = {
     ],
   },
   async rewrites() {
-    if (!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL) {
+    if (!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL || !process.env.NEXT_PUBLIC_IMMICH_API_KEY) {
       return [];
     }
     const destination = `${process.env.NEXT_PUBLIC_IMMICH_SERVER_URL}/api/:path*`;
@@ -34,6 +34,13 @@ const nextConfig: NextConfig = {
     return [
       {
         source: '/api/immich/:path*',
+        has: [
+          {
+            type: 'header',
+            key: 'x-api-key',
+            value: process.env.NEXT_PUBLIC_IMMICH_API_KEY,
+          },
+        ],
         destination: destination,
       },
     ];
