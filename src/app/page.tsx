@@ -476,6 +476,7 @@ export default function Home() {
       return;
     }
     
+    // Reset progress when media changes
     setProgress(0);
     
     let displayDuration = DURATION;
@@ -633,8 +634,9 @@ export default function Home() {
                     src={media.url}
                     onEnded={advanceToNextAsset}
                     onLoadedData={() => {
+                        // This ensures the progress bar is synced with the actual video duration
                         if (isCurrent && videoRef.current) {
-                            setProgress(0);
+                            setProgress(0); 
                         }
                     }}
                     muted
@@ -675,7 +677,7 @@ export default function Home() {
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>No Media To Display</AlertTitle>
             <AlertDescription>
-              Could not find any suitable photos on your Immich server. Check your configuration.
+              Could not find any suitable photos on your Immich server. Check your configuration or asset availability.
             </AlertDescription>
           </Alert>
         </div>
@@ -819,3 +821,5 @@ export default function Home() {
     </main>
   );
 }
+
+  
