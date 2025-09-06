@@ -208,12 +208,18 @@ export default function Home() {
         URL.revokeObjectURL(currentMedia.url);
     }
     
-    // If we're near the end of the current playlist, start fetching the next page.
-    if (playlist.length > 0 && assetIndex === playlist.length - 5 && !isFetching) {
+    const currentIndex = playlist.findIndex(a => a.id === currentMedia?.id);
+    if (currentIndex >= 0 && currentIndex > playlist.length - 5 && !isFetching) {
         setIsFetching(true); // Trigger fetch
     }
     
     if (nextMedia) {
+        const nextAssetInPlaylist = playlist.find(asset => asset.id === nextMedia.id);
+        if (nextAssetInPlaylist) {
+            localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextAssetInPlaylist.createdAt);
+            setTakenBefore(nextAssetInPlaylist.createdAt);
+        }
+
         const nextAssetIndexInPlaylist = playlist.findIndex(asset => asset.id === nextMedia.id);
         const newIndex = nextAssetIndexInPlaylist >= 0 ? nextAssetIndexInPlaylist : (assetIndex + 1) % playlist.length;
 
@@ -245,6 +251,11 @@ export default function Home() {
         }
         
         if (newAsset) {
+             const nextAssetInPlaylist = playlist.find(asset => asset.id === newAsset.id);
+            if (nextAssetInPlaylist) {
+                localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextAssetInPlaylist.createdAt);
+                setTakenBefore(nextAssetInPlaylist.createdAt);
+            }
             setCurrentMedia(newAsset);
             setAssetIndex(finalIndex);
             preloadNextAsset(finalIndex + 1);
@@ -268,6 +279,7 @@ export default function Home() {
     if (savedDate) {
         setTakenBefore(savedDate);
     }
+    setIsFetching(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -325,7 +337,7 @@ export default function Home() {
               sort: 'DESC',
         };
 
-        const dateToFetch = takenBefore || localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
+        const dateToFetch = takenBefore;
         if (dateToFetch) {
             requestBody.takenBefore = dateToFetch;
         }
@@ -350,8 +362,8 @@ export default function Home() {
         
         if (fetchedAssets.length === 0 && dateToFetch) {
             console.log("No more assets found, starting from the beginning.");
-            setTakenBefore(null);
             localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
+            setTakenBefore(null);
             setPlaylist([]);
             setAssetIndex(0);
             setIsFetching(true); // Trigger fetch from beginning
@@ -397,11 +409,10 @@ export default function Home() {
         if (fetchedAssets.length > 0) {
             const lastAsset = fetchedAssets[fetchedAssets.length - 1];
             const newTakenBefore = lastAsset.createdAt;
-            setTakenBefore(newTakenBefore);
-            localStorage.setItem(LOCAL_STORAGE_DATE_KEY, newTakenBefore);
-        } else if (dateToFetch) {
-             setTakenBefore(null);
-             localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
+            // Only update if the new date is actually older than the current one
+            if (!takenBefore || new Date(newTakenBefore) < new Date(takenBefore)) {
+                setTakenBefore(newTakenBefore);
+            }
         }
         
       } catch (e: any) {
@@ -412,11 +423,11 @@ export default function Home() {
       }
     };
     
-    if (!configError && (isFetching || (isLoading && playlist.length === 0))) {
+    if (!configError && isFetching) {
         fetchAssets();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configError, isFetching, isLoading]);
+  }, [configError, isFetching]);
 
   // Initial asset load
   useEffect(() => {
@@ -427,6 +438,8 @@ export default function Home() {
                 const mediaAsset = await getAssetWithRetry(asset);
                 if (mediaAsset) {
                     setCurrentMedia(mediaAsset);
+                    localStorage.setItem(LOCAL_STORAGE_DATE_KEY, asset.createdAt);
+                    setTakenBefore(asset.createdAt);
                     preloadNextAsset(1);
                 } else {
                     advanceToNextAsset();
