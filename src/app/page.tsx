@@ -638,7 +638,7 @@ export default function Home() {
     }
     
     return (
-        <div className={cn("absolute inset-0 transition-opacity duration-500", isFading ? 'opacity-0' : 'opacity-100')}>
+        <div key={media.id} className={cn("absolute inset-0 transition-opacity duration-500", isFading ? 'opacity-0' : 'opacity-100')}>
             <Image
                 key={`${media.id}-bg`}
                 src={media.url}
@@ -751,11 +751,11 @@ export default function Home() {
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-4 md:p-6 text-white">
         {/* Left Box: Time and Progress */}
         <div className="flex items-end gap-4">
-            <div className="w-[250px] space-y-1 rounded-lg bg-black/30 p-4 backdrop-blur-sm">
-                <div className="text-5xl font-semibold">
+            <div className="w-[200px] space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm">
+                <div className="text-4xl font-semibold">
                     {currentTime}
                 </div>
-                <div className="text-2xl font-medium text-white/90">
+                <div className="text-xl font-medium text-white/90">
                     {currentDate}
                 </div>
                 <div className="w-full pt-2">
@@ -805,7 +805,5 @@ export default function Home() {
     </main>
   );
 }
-
-    
 
     
