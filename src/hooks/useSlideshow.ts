@@ -46,8 +46,11 @@ export function useSlideshow(immich: ImmichHook) {
   // --- Core Slideshow Logic ---
   const setCurrentMediaAndMarkVisited = useCallback((media: MediaAsset | null) => {
     setCurrentMedia(media);
-    if (media?.asset?.fileCreatedAt) {
-      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, media.asset.fileCreatedAt);
+    if (media?.asset) {
+      const takenDate = media.asset.exifInfo?.dateTimeOriginal || media.asset.fileCreatedAt;
+      if (takenDate) {
+        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, takenDate);
+      }
     }
   }, []);
 
@@ -166,7 +169,7 @@ export function useSlideshow(immich: ImmichHook) {
 
     startSlideshow();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialError, setCurrentMediaAndMarkVisited]);
+  }, [initialError]);
 
   
   // Asset rotation timer for images
