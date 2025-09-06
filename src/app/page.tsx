@@ -240,7 +240,6 @@ export default function Home() {
     setIsFetching(true);
   }, []);
   
-  // *** THE ONLY SOURCE OF TRUTH FOR SAVING THE DATE ***
   // Unconditionally save the current asset's date to local storage whenever it changes.
   useEffect(() => {
     if (currentMedia?.asset?.fileCreatedAt) {
@@ -329,28 +328,37 @@ export default function Home() {
 
         let mutablePlaylist = [...playlist];
         
-        // Load current
         const firstAssetToLoad = mutablePlaylist.shift();
-        if (firstAssetToLoad) {
-            const firstMedia = await getAssetWithRetry(firstAssetToLoad);
-            setCurrentMedia(firstMedia);
-        } else {
+        const secondAssetToLoad = mutablePlaylist.shift();
+
+        if (!firstAssetToLoad) {
             setError("Failed to load any initial assets.");
             setIsLoading(false);
             return;
         }
 
-        // Preload next and update playlist
-        const updatedPlaylist = await preloadNextAsset(mutablePlaylist);
-        setPlaylist(updatedPlaylist);
+        // Fetch first and second assets in parallel
+        const [firstMediaResult, secondMediaResult] = await Promise.all([
+            getAssetWithRetry(firstAssetToLoad),
+            secondAssetToLoad ? getAssetWithRetry(secondAssetToLoad) : Promise.resolve(null)
+        ]);
 
+        if (!firstMediaResult) {
+            setError("Failed to load the first asset. Cannot start slideshow.");
+            setIsLoading(false);
+            return;
+        }
+
+        setCurrentMedia(firstMediaResult);
+        setNextMedia(secondMediaResult);
+        setPlaylist(mutablePlaylist);
         setIsLoading(false);
     };
 
     if (playlist.length > 0 && isLoading) {
       startSlideshow();
     }
-  }, [isLoading, playlist, getAssetWithRetry, preloadNextAsset]);
+  }, [isLoading, playlist, getAssetWithRetry]);
 
 
   // Asset rotation timer for images
