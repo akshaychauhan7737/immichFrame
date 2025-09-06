@@ -16,7 +16,7 @@ const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '150
 const RETRY_DELAY = 5000; // 5 seconds
 const WEATHER_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const AIR_POLLUTION_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const ASSET_FETCH_PAGE_SIZE = 50;
+const ASSET_FETCH_PAGE_SIZE = 10;
 const LOCAL_STORAGE_DATE_KEY = 'immich-view-taken-before';
 
 // --- Environment Variable-based Configuration ---
