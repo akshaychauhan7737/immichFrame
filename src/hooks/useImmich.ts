@@ -4,14 +4,14 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { ImmichAsset, MediaAsset } from '@/lib/types';
 import { useToast } from './use-toast';
-import { LOCAL_STORAGE_DATE_KEY, LOCAL_STORAGE_UPDATED_KEY } from './useSlideshow';
+import { LOCAL_STORAGE_DATE_KEY } from './useSlideshow';
 
 // --- Environment-based Configuration ---
 const SERVER_URL = process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
 const API_KEY = process.env.NEXT_PUBLIC_IMMICH_API_KEY;
 const IS_FAVORITE_ONLY = process.env.NEXT_PUBLIC_IMMICH_IS_FAVORITE_ONLY === 'true';
 const IS_ARCHIVED_INCLUDED = process.env.NEXT_PUBLIC_IMMICH_INCLUDE_ARCHIVED === 'true';
-const ASSET_FETCH_PAGE_SIZE = 25;
+const ASSET_FETCH_PAGE_SIZE = 100;
 const API_BASE_URL = '/api/immich';
 
 const FETCH_TIMEOUT = 10000; // 10 seconds
@@ -34,7 +34,6 @@ export function useImmich() {
         }
 
         const takenBefore = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
-        const updatedAfter = localStorage.getItem(LOCAL_STORAGE_UPDATED_KEY);
 
         try {
             const requestBody: any = {
@@ -47,9 +46,6 @@ export function useImmich() {
             
             if (takenBefore) {
                 requestBody.takenBefore = takenBefore;
-            }
-            if (updatedAfter) {
-                requestBody.updatedAfter = updatedAfter;
             }
 
             const response = await fetch(`${API_BASE_URL}/search/metadata`, {
@@ -73,7 +69,6 @@ export function useImmich() {
             if (items.length === 0 && takenBefore) {
                 console.log("Reached end of timeline, looping back to the beginning.");
                 localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
-                localStorage.removeItem(LOCAL_STORAGE_UPDATED_KEY);
                 // Immediately re-fetch from the start.
                 return fetchAssets();
             }

@@ -10,7 +10,6 @@ import { useToast } from './use-toast';
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
 export const LOCAL_STORAGE_DATE_KEY = 'immich-view-taken-before';
-export const LOCAL_STORAGE_UPDATED_KEY = 'immich-view-updated-after';
 
 
 // --- Helper Functions ---
@@ -48,12 +47,9 @@ export function useSlideshow(immich: ImmichHook) {
   const setCurrentMediaAndMarkVisited = useCallback((media: MediaAsset | null) => {
     setCurrentMedia(media);
     if (media?.asset) {
-      const takenDate = media.asset.exifInfo?.dateTimeOriginal || media.asset.fileCreatedAt;
+      const takenDate = media.asset.fileCreatedAt;
       if (takenDate) {
         localStorage.setItem(LOCAL_STORAGE_DATE_KEY, takenDate);
-      }
-      if (media.asset.updatedAt) {
-        localStorage.setItem(LOCAL_STORAGE_UPDATED_KEY, media.asset.updatedAt);
       }
     }
   }, []);
@@ -235,8 +231,6 @@ export function useSlideshow(immich: ImmichHook) {
     } else {
         localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
     }
-    // Always remove the updatedAfter key when changing timeline
-    localStorage.removeItem(LOCAL_STORAGE_UPDATED_KEY);
     
     // Reset state and re-initialize
     setPlaylist([]);
