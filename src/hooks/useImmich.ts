@@ -125,10 +125,8 @@ export function useImmich() {
         let previewUrl: string | null = null;
         
         if (asset.type === 'IMAGE') {
-            [originalUrl, previewUrl] = await Promise.all([
-                getAssetUrl(asset, 'original'),
-                getAssetUrl(asset, 'preview') // Keep preview for background
-            ]);
+            previewUrl = await getAssetUrl(asset, 'preview');
+            originalUrl = previewUrl; // Use preview for both to ensure compatibility
         } else { // VIDEO
             [originalUrl, previewUrl] = await Promise.all([
                 getAssetUrl(asset, 'original'),
