@@ -268,7 +268,7 @@ export default function Home() {
         }
         
         const data = await response.json();
-        const fetchedAssets: ImmichAsset[] = data;
+        const fetchedAssets: ImmichAsset[] = data.assets;
         
         // If we fetched a page > 1 and got no assets, loop back to page 1
         if (fetchedAssets.length === 0 && fetchPage > 1) {
@@ -673,5 +673,3 @@ export default function Home() {
     </main>
   );
 }
-
-  
