@@ -65,12 +65,14 @@ export function useSlideshow(immich: ImmichHook) {
   }, [getAssetWithRetry]);
 
   const advanceToNextAsset = useCallback(async () => {
+    // If there is no next media, trigger a fetch and stop.
     if (!nextMedia) {
-      console.log("Next media not ready, triggering fetch.");
-      if (playlist.length === 0) {
-        setIsFetching(true);
-      }
-      return;
+        console.log("Next media not ready, triggering fetch.");
+        // Only fetch if not already fetching
+        if (!isFetching) {
+          setIsFetching(true);
+        }
+        return;
     }
 
     const oldMedia = currentMedia;
@@ -93,7 +95,7 @@ export function useSlideshow(immich: ImmichHook) {
       
       setIsFading(false);
     });
-  }, [nextMedia, playlist, currentMedia, preloadNextAsset, revokeAssetUrls]);
+  }, [nextMedia, playlist, currentMedia, preloadNextAsset, revokeAssetUrls, isFetching]);
   
   // --- Effects ---
 
@@ -134,6 +136,10 @@ export function useSlideshow(immich: ImmichHook) {
           setError(`No photos found matching your filters.`);
           setIsLoading(false);
           setIsFetching(false);
+          // This happens if the server has no assets at all. Ensure nextMedia is null.
+          if (!currentMedia) {
+            setNextMedia(null); 
+          }
         }
         return;
       }
@@ -143,7 +149,7 @@ export function useSlideshow(immich: ImmichHook) {
     };
 
     performFetch();
-  }, [isFetching, fetchAssets]);
+  }, [isFetching, fetchAssets, currentMedia]);
 
   // Initial slideshow start when playlist is populated
   useEffect(() => {
