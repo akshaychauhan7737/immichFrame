@@ -270,7 +270,7 @@ export default function Home() {
                 console.log("No more assets found, starting from the beginning.");
                 setTakenBefore(null);
                 localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
-                // Trigger another fetch from the beginning, which will happen because isFetching will be set.
+                // isFetching will be set to true at the end of this function, triggering another fetch
             } else {
                 // No assets found at all
                 setError(`No photos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
@@ -371,13 +371,17 @@ export default function Home() {
   const handleDateSelect = useCallback((date: Date | undefined) => {
     if (date) {
         const newDate = date.toISOString();
+        // Overwrite local storage immediately
         localStorage.setItem(LOCAL_STORAGE_DATE_KEY, newDate);
+        
+        // Reset state to force a complete reload from the new date
         setTakenBefore(newDate);
         setPlaylist([]);
         setCurrentMedia(null);
         setNextMedia(null);
         setIsLoading(true);
-        setIsFetching(true);
+        setIsFetching(true); // This will trigger the fetchAssets effect
+        
         toast({
             title: "Timeline Set",
             description: `Searching for photos taken before ${format(date, 'PPP')}.`,
@@ -739,3 +743,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
