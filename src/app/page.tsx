@@ -215,7 +215,7 @@ export default function Home() {
     
     if (nextMedia) {
         const nextAssetInPlaylist = playlist.find(asset => asset.id === nextMedia.id);
-        if (nextAssetInPlaylist) {
+        if (nextAssetInPlaylist && nextAssetInPlaylist.createdAt) {
             localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextAssetInPlaylist.createdAt);
             setTakenBefore(nextAssetInPlaylist.createdAt);
         }
@@ -252,7 +252,7 @@ export default function Home() {
         
         if (newAsset) {
              const nextAssetInPlaylist = playlist.find(asset => asset.id === newAsset.id);
-            if (nextAssetInPlaylist) {
+            if (nextAssetInPlaylist && nextAssetInPlaylist.createdAt) {
                 localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextAssetInPlaylist.createdAt);
                 setTakenBefore(nextAssetInPlaylist.createdAt);
             }
@@ -276,7 +276,7 @@ export default function Home() {
   // Load date from localStorage on mount
   useEffect(() => {
     const savedDate = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
-    if (savedDate) {
+    if (savedDate && savedDate !== 'undefined') {
         setTakenBefore(savedDate);
     }
     setIsFetching(true);
@@ -408,10 +408,12 @@ export default function Home() {
         
         if (fetchedAssets.length > 0) {
             const lastAsset = fetchedAssets[fetchedAssets.length - 1];
-            const newTakenBefore = lastAsset.createdAt;
-            // Only update if the new date is actually older than the current one
-            if (!takenBefore || new Date(newTakenBefore) < new Date(takenBefore)) {
-                setTakenBefore(newTakenBefore);
+            if (lastAsset && lastAsset.createdAt) {
+                const newTakenBefore = lastAsset.createdAt;
+                // Only update if the new date is actually older than the current one
+                if (!takenBefore || new Date(newTakenBefore) < new Date(takenBefore)) {
+                    setTakenBefore(newTakenBefore);
+                }
             }
         }
         
@@ -438,10 +440,14 @@ export default function Home() {
                 const mediaAsset = await getAssetWithRetry(asset);
                 if (mediaAsset) {
                     setCurrentMedia(mediaAsset);
-                    localStorage.setItem(LOCAL_STORAGE_DATE_KEY, asset.createdAt);
-                    setTakenBefore(asset.createdAt);
+                    if (asset.createdAt) {
+                        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, asset.createdAt);
+                        setTakenBefore(asset.createdAt);
+                    }
                     preloadNextAsset(1);
                 } else {
+                    // If first asset fails, advance to the next one
+                    await delay(RETRY_DELAY);
                     advanceToNextAsset();
                 }
             }
@@ -815,3 +821,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
