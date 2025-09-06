@@ -270,8 +270,7 @@ export default function Home() {
                 console.log("No more assets found, starting from the beginning.");
                 setTakenBefore(null);
                 localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
-                // Trigger another fetch from the beginning
-                setIsFetching(true); 
+                // Trigger another fetch from the beginning, which will happen because isFetching will be set.
             } else {
                 // No assets found at all
                 setError(`No photos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
@@ -285,7 +284,6 @@ export default function Home() {
       } catch (e: any) {
           setError(`Failed to connect to Immich server: ${e.message}`);
           await delay(RETRY_DELAY);
-          setIsFetching(true); // Retry after a delay
       } finally {
           setIsFetching(false);
       }
@@ -296,13 +294,14 @@ export default function Home() {
     }
   }, [configError, isFetching, takenBefore]);
 
-  // Trigger fetch when playlist runs out
+  // Trigger fetch when playlist runs low
   useEffect(() => {
-    if (!isFetching && playlist.length === 0 && currentMedia && !isLoading) {
+    // If we are not fetching, and the playlist is empty, and we are not in an error/loading state, fetch more.
+    if (!isFetching && playlist.length === 0 && !isLoading && !error) {
       console.log("Playlist is empty, fetching more assets.");
       setIsFetching(true);
     }
-  }, [playlist, isFetching, currentMedia, isLoading]);
+  }, [playlist.length, isFetching, isLoading, error]);
 
 
   // Initial asset load and starting the slideshow
@@ -313,38 +312,34 @@ export default function Home() {
           let assetsForFirstLoad = [...playlist];
           
           // 1. Set current media if it's not set
-          if (!currentMedia) {
-              let firstMedia: MediaAsset | null = null;
-              while(!firstMedia && assetsForFirstLoad.length > 0) {
-                  const asset = assetsForFirstLoad.shift();
-                  if (asset) firstMedia = await getAssetWithRetry(asset);
-              }
-
-              if (firstMedia) {
-                  setCurrentMedia(firstMedia);
-                   if (firstMedia.asset.createdAt) {
-                        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, firstMedia.asset.createdAt);
-                   }
-              } else {
-                   setError("Failed to load initial asset(s).");
-                   setIsLoading(false);
-                   return;
-              }
+          let firstMedia: MediaAsset | null = null;
+          while(!firstMedia && assetsForFirstLoad.length > 0) {
+              const asset = assetsForFirstLoad.shift();
+              if (asset) firstMedia = await getAssetWithRetry(asset);
           }
 
-          // 2. Set next media if it's not set
-          if (!nextMedia) {
-              const remainingAssets = await preloadNextAsset(assetsForFirstLoad);
-              setPlaylist(remainingAssets);
+          if (firstMedia) {
+              setCurrentMedia(firstMedia);
+               if (firstMedia.asset.createdAt) {
+                    localStorage.setItem(LOCAL_STORAGE_DATE_KEY, firstMedia.asset.createdAt);
+               }
+          } else {
+               setError("Failed to load any initial assets. Please check your connection and filters.");
+               setIsLoading(false);
+               return;
           }
+
+          // 2. Set next media
+          const remainingAssets = await preloadNextAsset(assetsForFirstLoad);
+          setPlaylist(remainingAssets);
           
           setIsLoading(false);
       };
 
-      if (!isLoading && playlist.length > 0 && (!currentMedia || !nextMedia)) {
+      if (isLoading && playlist.length > 0 && !currentMedia) {
           startSlideshow();
       }
-  }, [isLoading, currentMedia, nextMedia, playlist, getAssetWithRetry, preloadNextAsset]);
+  }, [isLoading, currentMedia, playlist, getAssetWithRetry, preloadNextAsset]);
 
 
   // Asset rotation timer for images
@@ -365,6 +360,7 @@ export default function Home() {
     setPlaylist([]);
     setCurrentMedia(null);
     setNextMedia(null);
+    setIsLoading(true);
     setIsFetching(true);
     toast({
         title: "Timeline Reset",
@@ -380,6 +376,7 @@ export default function Home() {
         setPlaylist([]);
         setCurrentMedia(null);
         setNextMedia(null);
+        setIsLoading(true);
         setIsFetching(true);
         toast({
             title: "Timeline Set",
@@ -488,7 +485,7 @@ export default function Home() {
   
   // --- Render Logic ---
 
-  if (isLoading) {
+  if (isLoading && !error) {
     return (
       <div className="flex h-screen w-screen flex-col items-center justify-center bg-background text-foreground">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
