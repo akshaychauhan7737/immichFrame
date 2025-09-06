@@ -113,8 +113,9 @@ export default function Home() {
   }, []);
   
   const currentAsset = useMemo(() => {
-    return playlist[assetIndex];
-  }, [playlist, assetIndex]);
+    if (!currentMedia) return null;
+    return playlist.find(asset => asset.id === currentMedia.id);
+  }, [playlist, currentMedia]);
 
   // --- Asset Fetching Logic ---
   const getAssetUrl = useCallback(async (asset: ImmichAsset): Promise<string | null> => {
@@ -206,15 +207,15 @@ export default function Home() {
     if (currentMedia?.url) {
         URL.revokeObjectURL(currentMedia.url);
     }
-
+    
     // If we're near the end of the current playlist, start fetching the next page.
     if (playlist.length > 0 && assetIndex === playlist.length - 5 && !isFetching) {
         setIsFetching(true); // Trigger fetch
     }
     
     if (nextMedia) {
-        const nextAssetIndex = playlist.findIndex(asset => asset.id === nextMedia.id);
-        const newIndex = nextAssetIndex >= 0 ? nextAssetIndex : (assetIndex + 1) % playlist.length;
+        const nextAssetIndexInPlaylist = playlist.findIndex(asset => asset.id === nextMedia.id);
+        const newIndex = nextAssetIndexInPlaylist >= 0 ? nextAssetIndexInPlaylist : (assetIndex + 1) % playlist.length;
 
         setCurrentMedia(nextMedia);
         setAssetIndex(newIndex);
@@ -636,13 +637,8 @@ export default function Home() {
         );
     }
     
-    // Common props for images, now handled inside the return for clarity
-    const commonImageProps = {
-        className: cn("transition-opacity duration-500", isFading ? 'opacity-0' : 'opacity-100')
-    };
-
     return (
-        <div className={cn("absolute inset-0", commonImageProps.className)}>
+        <div className={cn("absolute inset-0 transition-opacity duration-500", isFading ? 'opacity-0' : 'opacity-100')}>
             <Image
                 key={`${media.id}-bg`}
                 src={media.url}
@@ -809,7 +805,5 @@ export default function Home() {
     </main>
   );
 }
-
-    
 
     
