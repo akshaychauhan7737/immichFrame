@@ -195,6 +195,11 @@ export default function Home() {
         URL.revokeObjectURL(currentMedia.url);
     }
     
+    // Unconditionally save the new asset's date to local storage
+    if (nextMedia.asset.createdAt) {
+      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextMedia.asset.createdAt);
+    }
+    
     setCurrentMedia(nextMedia);
     
     // Preload the next asset and update the playlist
@@ -216,12 +221,6 @@ export default function Home() {
     setIsFetching(true);
   }, []);
   
-  // Save the current asset's date to localStorage whenever it changes
-  useEffect(() => {
-    if (currentMedia?.asset?.createdAt) {
-      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, currentMedia.asset.createdAt);
-    }
-  }, [currentMedia]);
 
   // Main logic to fetch assets from search endpoint
   useEffect(() => {
@@ -298,7 +297,7 @@ export default function Home() {
     if (isFetching) {
         fetchAssets();
     }
-  }, [configError, isFetching, takenBefore]);
+  }, [configError, isFetching, takenBefore, IS_FAVORITE_ONLY, IS_ARCHIVED_INCLUDED]);
 
   // Trigger fetch when playlist runs low
   useEffect(() => {
@@ -325,6 +324,10 @@ export default function Home() {
           }
 
           if (firstMedia) {
+              // Unconditionally save the first asset's date to local storage on start
+              if (firstMedia.asset.createdAt) {
+                localStorage.setItem(LOCAL_STORAGE_DATE_KEY, firstMedia.asset.createdAt);
+              }
               setCurrentMedia(firstMedia);
           } else {
                setError("Failed to load any initial assets. Please check your connection and filters.");
@@ -541,7 +544,6 @@ export default function Home() {
       return (
         <div key={media.id} className={containerClasses}>
           <video
-            key={`${media.id}-bg`}
             src={media.url}
             aria-hidden="true"
             className="absolute object-cover blur-2xl scale-110 h-full w-full"
@@ -552,7 +554,6 @@ export default function Home() {
           <div className="absolute inset-0 bg-black/50"></div>
           <video
             ref={videoRef}
-            key={media.id}
             src={media.url}
             onEnded={advanceToNextAsset}
             onLoadedData={() => {
@@ -571,7 +572,6 @@ export default function Home() {
     return (
       <div key={media.id} className={containerClasses}>
         <Image
-          key={`${media.id}-bg`}
           src={media.url}
           alt=""
           aria-hidden="true"
@@ -580,7 +580,6 @@ export default function Home() {
         />
         <div className="absolute inset-0 bg-black/50"></div>
         <Image
-          key={media.id}
           src={media.url}
           alt="Immich Photo"
           fill
@@ -743,5 +742,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
