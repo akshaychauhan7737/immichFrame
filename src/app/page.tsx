@@ -271,6 +271,7 @@ export default function Home() {
               isArchived: IS_ARCHIVED_INCLUDED ? undefined : false,
               size: ASSET_FETCH_PAGE_SIZE,
               sort: 'DESC',
+              withExif: true,
         };
 
         if (takenBefore) {
@@ -728,7 +729,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
-
-    
