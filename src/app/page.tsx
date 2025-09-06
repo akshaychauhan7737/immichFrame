@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import type { ImmichAsset, AirPollutionData, WeatherData } from '@/lib/types';
@@ -120,7 +119,8 @@ export default function Home() {
       const res = await fetch(url, {
         method: 'GET',
         headers: { 'x-api-key': API_KEY as string },
-        signal: controller.signal
+        signal: controller.signal,
+        cache: 'no-store'
       });
 
       clearTimeout(timeoutId);
