@@ -3,6 +3,7 @@
 
 import type { ImmichAsset, AirPollutionData, WeatherData } from '@/lib/types';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import Image from 'next/image';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -217,41 +218,39 @@ export default function Home() {
 
   const advanceToNextAsset = useCallback(async () => {
     if (!nextMedia) {
-      console.log("Next media not ready, will trigger fetch if playlist is low.");
-      // Trigger a fetch if the playlist is exhausted
+      console.log("Next media not ready, will trigger fetch if playlist is empty.");
       if (playlist.length === 0 && !isFetching) {
           setIsFetching(true);
       }
       return;
     }
   
-    setIsFading(true);
-    await delay(500); // Wait for fade-out
-  
     const oldMedia = currentMedia;
-  
-    // Promote next to current
-    setCurrentMedia({ ...nextMedia });
-  
-    // Preload the next asset and update the playlist
-    const updatedPlaylist = await preloadNextAsset(playlist);
-    setPlaylist(updatedPlaylist);
-  
-    // Queue old URLs for revocation
-    if (oldMedia) {
-        const urlsToQueue = [];
-        if (oldMedia.url && oldMedia.url !== oldMedia.previewUrl) {
-            urlsToQueue.push(oldMedia.url);
+    
+    // Create a new object to ensure React detects the change for the useEffect hook
+    const newCurrentMedia = { ...nextMedia };
+
+    flushSync(async () => {
+        setIsFading(true);
+        await delay(500); // Wait for fade-out
+
+        // Promote next to current
+        setCurrentMedia(newCurrentMedia);
+
+        // Preload the next asset and update the playlist
+        const updatedPlaylist = await preloadNextAsset(playlist);
+        setPlaylist(updatedPlaylist);
+
+        // Queue old URLs for revocation
+        if (oldMedia) {
+            const urlsToQueue = [oldMedia.url, oldMedia.previewUrl];
+            if (urlsToQueue.length > 0) {
+                setUrlsToRevoke(prev => [...prev, ...urlsToQueue.filter(Boolean)]);
+            }
         }
-        if (oldMedia.previewUrl) {
-            urlsToQueue.push(oldMedia.previewUrl);
-        }
-        if (urlsToQueue.length > 0) {
-            setUrlsToRevoke(prev => [...prev, ...urlsToQueue]);
-        }
-    }
-  
-    setIsFading(false);
+        setIsFading(false);
+    });
+
   }, [nextMedia, playlist, currentMedia, preloadNextAsset, isFetching]);
 
 
@@ -349,7 +348,7 @@ export default function Home() {
       } finally {
           setIsFetching(false);
       }
-    }, [configError]);
+    }, [configError, IS_FAVORITE_ONLY, IS_ARCHIVED_INCLUDED]);
 
   // Main logic to fetch assets from search endpoint
   useEffect(() => {
@@ -384,7 +383,7 @@ export default function Home() {
             setError("Failed to load the first asset. Cannot start slideshow.");
             setIsLoading(false);
             // Re-trigger fetch if initial load fails and playlist is now empty
-            if (mutablePlaylist.length === 0) {
+            if (mutablePlaylist.length === 0 && !isFetching) {
               setIsFetching(true);
             }
             return;
