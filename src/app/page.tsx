@@ -285,10 +285,7 @@ export default function Home() {
     }
   }, [currentMedia]);
   
-
-  // Main logic to fetch assets from search endpoint
-  useEffect(() => {
-    const fetchAssets = async () => {
+  const fetchAssets = useCallback(async () => {
       if (configError) {
         setError(configError);
         setIsLoading(false);
@@ -298,7 +295,6 @@ export default function Home() {
 
       setError(null);
       
-      // Use local storage as the single source of truth for the 'takenBefore' date.
       const takenBefore = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
 
       try {
@@ -334,14 +330,14 @@ export default function Home() {
         
         if (fetchedAssets.length === 0) {
             if (takenBefore && takenBefore !== 'undefined') {
-                // Reached the end, loop back by clearing the date from local storage
                 console.log("No more assets found, starting from the beginning.");
                 localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
-                // The next fetch cycle will automatically start from the latest assets.
+                // Immediately re-fetch from the beginning
+                fetchAssets(); 
             } else {
-                // No assets found at all
                 setError(`No photos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
                 setIsLoading(false);
+                setIsFetching(false);
             }
             return;
         }
@@ -354,12 +350,14 @@ export default function Home() {
       } finally {
           setIsFetching(false);
       }
-    };
-    
+    }, [configError]);
+
+  // Main logic to fetch assets from search endpoint
+  useEffect(() => {
     if (isFetching) {
         fetchAssets();
     }
-  }, [configError, isFetching]);
+  }, [isFetching, fetchAssets]);
 
   // Initial asset load and starting the slideshow
   useEffect(() => {
