@@ -21,7 +21,6 @@ const RETRY_DELAY = 5000; // 5 seconds
 const WEATHER_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const AIR_POLLUTION_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const ASSET_FETCH_PAGE_SIZE = 25;
-const PLAYLIST_FETCH_THRESHOLD = 5; // Fetch more when playlist drops to this size
 const LOCAL_STORAGE_DATE_KEY = 'immich-view-taken-before';
 
 // --- Environment Variable-based Configuration ---
@@ -397,10 +396,10 @@ export default function Home() {
         setIsLoading(false);
     };
 
-    if (playlist.length > 0 && isLoading) {
+    if (playlist.length > 0 && isLoading && !isFetching) {
       startSlideshow();
     }
-  }, [isLoading, playlist, getAssetWithRetry]);
+  }, [isLoading, playlist, getAssetWithRetry, isFetching]);
 
 
   // Asset rotation timer for images
@@ -425,13 +424,6 @@ export default function Home() {
     }
   }, [currentMedia, advanceToNextAsset]);
   
-  // Fetch more assets when playlist runs low
-  useEffect(() => {
-    if (!isFetching && !isLoading && playlist.length < PLAYLIST_FETCH_THRESHOLD) {
-      setIsFetching(true);
-    }
-  }, [playlist.length, isFetching, isLoading]);
-
   const handleDateReset = useCallback(() => {
     localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
     setPlaylist([]);
@@ -680,8 +672,8 @@ export default function Home() {
       )}
       
       {/* Render current and next media for smooth transition */}
-      {currentMedia && renderMedia(currentMedia, true)}
-      {nextMedia && renderMedia(nextMedia, false)}
+       {currentMedia && renderMedia(currentMedia, true)}
+       {nextMedia && renderMedia(nextMedia, false)}
 
 
       {/* Top Left: Air Pollution */}
@@ -817,3 +809,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
