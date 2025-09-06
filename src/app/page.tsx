@@ -20,7 +20,7 @@ const ASSET_FETCH_PAGE_SIZE = 10;
 const LOCAL_STORAGE_DATE_KEY = 'immich-view-taken-before';
 
 // --- Environment Variable-based Configuration ---
-const DISPLAY_MODE = process.env.NEXT_PUBLIC_DISPLAY_MODE; // 'portrait', 'landscape', or 'all'
+const DISPLAY_MODE = process.env.NEXT_PUBLIC_DISPLAY_MODE; // 'portrait', 'landscape', 'all'
 const SERVER_URL_CONFIGURED = !!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
 const API_KEY = process.env.NEXT_PUBLIC_IMMICH_API_KEY;
 const IS_FAVORITE_ONLY = process.env.NEXT_PUBLIC_IMMICH_IS_FAVORITE_ONLY === 'true';
@@ -46,10 +46,13 @@ function shuffleArray<T>(array: T[]): T[] {
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 function parseDuration(duration: string): number {
+    if (!duration || typeof duration !== 'string') return 0;
     const parts = duration.split(':');
+    if (parts.length !== 3) return 0;
     const hours = parseInt(parts[0], 10);
     const minutes = parseInt(parts[1], 10);
     const seconds = parseFloat(parts[2]);
+    if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) return 0;
     return hours * 3600 + minutes * 60 + seconds;
 }
 
@@ -184,11 +187,12 @@ export default function Home() {
     }
     
     // If we're near the end of the current playlist, start fetching the next page.
-    if (playlist.length > 0 && assetIndex >= playlist.length - 5) {
+    if (playlist.length > 0 && assetIndex >= playlist.length - 5 && !isFetching) {
         setIsFetching(true); // Trigger fetch
     }
     
     const nextIndex = (assetIndex + 1) % playlist.length;
+    setAssetIndex(nextIndex);
     
     let nextAsset = playlist[nextIndex];
     let newUrl = null;
@@ -196,13 +200,16 @@ export default function Home() {
 
     // Loop to find a loadable asset
     while(!newUrl && attempts < playlist.length) {
-        nextAsset = playlist[nextIndex];
+        const potentialNextIndex = (nextIndex + attempts) % playlist.length;
+        nextAsset = playlist[potentialNextIndex];
+
         if (nextAsset) {
             newUrl = await getAssetWithRetry(nextAsset);
         }
+
         if (!newUrl) {
-            // If loading fails, skip to the next asset in the playlist
-            setAssetIndex(currentIndex => (currentIndex + 1) % playlist.length);
+            // If loading fails, just increment attempts and loop.
+            // The index will be set correctly outside the loop.
             attempts++;
         }
     }
@@ -213,14 +220,14 @@ export default function Home() {
             id: nextAsset.id, 
             type: nextAsset.type as 'IMAGE' | 'VIDEO',
         });
-        setAssetIndex(nextIndex);
+        setAssetIndex((nextIndex + attempts) % playlist.length);
     } else {
         setError("Failed to load any assets from the playlist.");
     }
 
     setIsFading(false);
 
-}, [assetIndex, playlist, getAssetWithRetry, currentMedia]);
+}, [assetIndex, playlist, getAssetWithRetry, currentMedia, isFetching]);
 
 
   // --- Effects ---
@@ -238,6 +245,8 @@ export default function Home() {
     if (takenBefore) {
       localStorage.setItem(LOCAL_STORAGE_DATE_KEY, takenBefore);
     } else {
+      // Don't remove it, as that causes a loop on startup. 
+      // Set to empty string or handle null case gracefully.
       localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
     }
   }, [takenBefore]);
@@ -252,6 +261,7 @@ export default function Home() {
     }
 
     const fetchAssets = async () => {
+      // Only show initial loader if playlist is empty
       if (playlist.length === 0) setIsLoading(true);
       setError(null);
       
@@ -260,7 +270,6 @@ export default function Home() {
               isFavorite: IS_FAVORITE_ONLY,
               isArchived: IS_ARCHIVED_INCLUDED ? undefined : false,
               size: ASSET_FETCH_PAGE_SIZE,
-              withExif: true,
               sort: 'DESC',
         };
 
@@ -287,13 +296,14 @@ export default function Home() {
         const fetchedAssets: ImmichAsset[] = data.assets.items || [];
         
         if (fetchedAssets.length === 0 && takenBefore) {
-            setTakenBefore(null); // This will trigger a re-fetch for the latest photos
+            console.log("No more assets found, starting from the beginning.");
+            setTakenBefore(null); // This will trigger a re-fetch for the latest photos in the next cycle
             setPlaylist([]);
             setAssetIndex(0);
             return;
         }
 
-        if (playlist.length === 0 && (!fetchedAssets || fetchedAssets.length === 0)) {
+        if (playlist.length === 0 && fetchedAssets.length === 0) {
           setError(`No photos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
           setIsLoading(false);
           return;
@@ -302,17 +312,19 @@ export default function Home() {
         let filteredAssets = fetchedAssets.filter(asset => {
             if (DISPLAY_MODE && DISPLAY_MODE !== 'all' && asset.type === 'IMAGE') {
                 const orientation = asset.exifInfo?.orientation;
+                // '1' is standard landscape. Some cameras use other values.
+                // 6 and 8 are portrait (rotated).
                 if (orientation) {
-                    if (DISPLAY_MODE === 'landscape') return orientation === 1;
+                    if (DISPLAY_MODE === 'landscape') return ![6, 8].includes(orientation);
                     if (DISPLAY_MODE === 'portrait') return [6, 8].includes(orientation);
                 }
+                // Fallback for assets without EXIF orientation
                 const width = asset.exifInfo?.exifImageWidth;
                 const height = asset.exifInfo?.exifImageHeight;
                 if (width && height && width > 0 && height > 0) {
                     if (DISPLAY_MODE === 'landscape') return width > height;
                     if (DISPLAY_MODE === 'portrait') return height > width;
                 }
-                // Fallback for assets without EXIF data
                 return DISPLAY_MODE === 'landscape'; 
             }
             if (asset.type === 'VIDEO') {
@@ -323,19 +335,19 @@ export default function Home() {
         });
 
         if (filteredAssets.length > 0) {
-            const lastAsset = filteredAssets[filteredAssets.length - 1];
-            setTakenBefore(lastAsset.createdAt);
-            
             const newPlaylist = [...playlist, ...shuffleArray(filteredAssets)];
             setPlaylist(newPlaylist);
-        } else {
-            // If filtering results in no assets, fetch next batch
-            if (fetchedAssets.length > 0) {
-                const lastAsset = fetchedAssets[fetchedAssets.length - 1];
-                setTakenBefore(lastAsset.createdAt);
-            } else {
-                 setTakenBefore(null); // Loop back
-            }
+        }
+        
+        // Always update takenBefore from the original fetched list to ensure pagination continues
+        // even if the whole page is filtered out.
+        if (fetchedAssets.length > 0) {
+            const lastAsset = fetchedAssets[fetchedAssets.length - 1];
+            // The API returns fileCreatedAt which is more reliable for photos from various sources.
+            setTakenBefore(lastAsset.fileCreatedAt); 
+        } else if (takenBefore) {
+             // If we got nothing and we had a 'takenBefore' date, it means we're at the end. Loop back.
+             setTakenBefore(null);
         }
         
       } catch (e: any) {
@@ -345,29 +357,32 @@ export default function Home() {
           setIsFetching(false);
       }
     };
-
+    
+    // This condition triggers the fetch
     if (isFetching || (isLoading && playlist.length === 0)) {
-      fetchAssets();
+        fetchAssets();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configError, isFetching, isLoading, takenBefore]);
 
   // Initial asset load
   useEffect(() => {
-    if (!isLoading && !currentMedia && playlist.length > 0 && assetIndex < playlist.length) {
+    if (!isLoading && !currentMedia && playlist.length > 0) {
         const loadInitialAsset = async () => {
-            const asset = playlist[assetIndex];
-            const url = await getAssetWithRetry(asset);
-            if (url) {
-                setCurrentMedia({ url, id: asset.id, type: asset.type as 'IMAGE' | 'VIDEO' });
-            } else {
-                // If first asset fails, try to advance
-                advanceToNextAsset();
+            const asset = playlist[0]; // Start with the first asset in shuffled list
+            if (asset) {
+                const url = await getAssetWithRetry(asset);
+                if (url) {
+                    setCurrentMedia({ url, id: asset.id, type: asset.type as 'IMAGE' | 'VIDEO' });
+                } else {
+                    // If first asset fails, try to advance
+                    advanceToNextAsset();
+                }
             }
         };
         loadInitialAsset();
     }
-  }, [isLoading, currentMedia, playlist, assetIndex, getAssetWithRetry, advanceToNextAsset]);
+  }, [isLoading, currentMedia, playlist, getAssetWithRetry, advanceToNextAsset]);
 
 
   // Asset rotation timer for images
@@ -495,7 +510,7 @@ export default function Home() {
       <div className="flex h-screen w-screen items-center justify-center bg-background p-8">
         <Alert variant="destructive" className="max-w-lg">
           <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Configuration Error</AlertTitle>
+          <AlertTitle>Error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       </div>
@@ -713,3 +728,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
