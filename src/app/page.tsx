@@ -258,6 +258,7 @@ export default function Home() {
               page: fetchPage,
               size: ASSET_FETCH_PAGE_SIZE,
               withExif: true,
+              sort: 'DESC',
           })
         });
 
@@ -672,5 +673,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
