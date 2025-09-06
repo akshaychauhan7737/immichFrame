@@ -176,7 +176,7 @@ export default function Home() {
     let nextIndex = (assetIndex + 1) % playlist.length;
     
     // If we're near the end of the playlist, start fetching the next page
-    if (playlist.length > 0 && playlist.length - nextIndex < 5 && playlist.length % ASSET_FETCH_PAGE_SIZE === 0) {
+    if (playlist.length > 0 && playlist.length - nextIndex < 5 && (playlist.length % ASSET_FETCH_PAGE_SIZE === 0)) {
       setFetchPage(p => p + 1);
     }
     
@@ -672,3 +672,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
