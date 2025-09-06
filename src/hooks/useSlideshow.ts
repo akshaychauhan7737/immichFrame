@@ -45,36 +45,42 @@ export function useSlideshow(immich: ImmichHook) {
 
   // --- Core Slideshow Logic ---
   const preloadNextAsset = useCallback(async (currentPlaylist: ImmichAsset[]) => {
-    const mutablePlaylist = [...currentPlaylist];
+    let mutablePlaylist = [...currentPlaylist];
     let nextAssetToLoad = mutablePlaylist.shift();
 
+    // If playlist is empty, fetch more assets synchronously.
     if (!nextAssetToLoad) {
-      setNextMedia(null);
-      setIsFetching(true); // Proactively fetch if playlist runs dry
-      return mutablePlaylist;
+      setIsFetching(true);
+      setError(null);
+      const newAssets = await fetchAssets(null);
+      setIsFetching(false);
+
+      if (newAssets && newAssets.length > 0) {
+        mutablePlaylist = newAssets;
+        nextAssetToLoad = mutablePlaylist.shift();
+      } else {
+        // If fetch fails or returns no assets, stop preloading.
+        setNextMedia(null);
+        if (newAssets === null) setError(`Failed to connect to Immich server.`);
+        // If newAssets is empty array, it means end of timeline was reached. UI will show message.
+        return []; 
+      }
     }
   
     const newMedia = await getAssetWithRetry(nextAssetToLoad);
     
     if (newMedia) {
       setNextMedia(newMedia);
+      return mutablePlaylist; // Return the rest of the playlist
     } else {
-      // If loading fails, recursively try the next one
+      // If loading a specific asset fails, recursively try the next one.
       return await preloadNextAsset(mutablePlaylist);
     }
-    return mutablePlaylist;
-  }, [getAssetWithRetry]);
+  }, [getAssetWithRetry, fetchAssets, setError]);
+
 
   const advanceToNextAsset = useCallback(async () => {
-    // If there is no next media, trigger a fetch and stop.
-    if (!nextMedia) {
-        console.log("Next media not ready, triggering fetch.");
-        // Only fetch if not already fetching
-        if (!isFetching) {
-          setIsFetching(true);
-        }
-        return;
-    }
+    if (isFading) return; // Prevent multiple concurrent advances
 
     const oldMedia = currentMedia;
     
@@ -82,13 +88,21 @@ export function useSlideshow(immich: ImmichHook) {
       setIsFading(true);
       await delay(500); // Wait for fade-out
 
-      // Promote next to current, creating a new object to ensure re-render
-      setCurrentMedia({ ...nextMedia });
+      if (nextMedia) {
+        // Promote next to current
+        setCurrentMedia({ ...nextMedia });
 
-      // Preload the next asset and update the playlist
-      const updatedPlaylist = await preloadNextAsset(playlist);
-      setPlaylist(updatedPlaylist);
+        // Preload the next asset and update the playlist
+        const updatedPlaylist = await preloadNextAsset(playlist);
+        setPlaylist(updatedPlaylist);
 
+      } else {
+        // No next media was available, might be end of playlist. Trigger a preload.
+        const updatedPlaylist = await preloadNextAsset(playlist);
+        setPlaylist(updatedPlaylist);
+        // If preloadNextAsset was successful, nextMedia will be updated. If not, slideshow will pause.
+      }
+      
       // Clean up old blob URL
       if (oldMedia) {
         revokeAssetUrls(oldMedia);
@@ -96,67 +110,34 @@ export function useSlideshow(immich: ImmichHook) {
       
       setIsFading(false);
     });
-  }, [nextMedia, playlist, currentMedia, preloadNextAsset, revokeAssetUrls, isFetching]);
+  }, [nextMedia, playlist, currentMedia, preloadNextAsset, revokeAssetUrls, isFading]);
   
   // --- Effects ---
 
-  // Trigger initial fetch on mount
+  // Initial fetch and slideshow start on mount
   useEffect(() => {
-    if (!initialError) {
-      setIsFetching(true);
-    } else {
+    if (initialError) {
+      setError(initialError);
       setIsLoading(false);
+      return;
     }
-  }, [initialError]);
 
-  // Main logic to fetch assets when isFetching is true
-  useEffect(() => {
-    if (!isFetching) return;
-
-    const performFetch = async () => {
-      setError(null);
-      const newAssets = await fetchAssets();
-
-      if (newAssets === null) {
-        setError(`Failed to connect to Immich server.`);
-        setIsFetching(false);
-        await delay(5000);
-        setIsFetching(true); // Retry after delay
-        return;
-      }
-      
-      if (newAssets.length === 0) {
-        setError(`No photos found matching your filters. Checking again from the beginning.`);
-        // This will be cleared on the next successful fetch
-        if (!currentMedia) {
-          setNextMedia(null); 
-        }
-        setIsFetching(false); // Stop fetching if empty to avoid loop, UI will show error
-        return;
-      }
-      
-      setPlaylist(current => [...current, ...newAssets]);
-      setIsFetching(false);
-    };
-
-    performFetch();
-  }, [isFetching, fetchAssets, currentMedia]);
-
-  // Initial slideshow start when playlist is populated for the first time or after a reset
-  useEffect(() => {
     const startSlideshow = async () => {
-      // This effect should only run to kickstart the process.
-      // It runs if we have a playlist, are not fetching, and either loading for the first time OR have no current media.
-      if (playlist.length === 0 || isFetching || (!isLoading && currentMedia)) {
+      setIsFetching(true);
+      const initialAssets = await fetchAssets(null);
+      setIsFetching(false);
+
+      if (!initialAssets || initialAssets.length === 0) {
+        setError("No photos found. Check your Immich settings or server connection.");
+        setIsLoading(false);
         return;
       }
-
-      // If we are here, we have a fresh playlist and need to start the show.
-      let mutablePlaylist = [...playlist];
       
+      let mutablePlaylist = [...initialAssets];
       const firstAssetToLoad = mutablePlaylist.shift();
+
       if (!firstAssetToLoad) {
-        setError("Failed to load any initial assets.");
+        setError("Failed to get first asset from the list.");
         setIsLoading(false);
         return;
       }
@@ -165,10 +146,6 @@ export function useSlideshow(immich: ImmichHook) {
       if (!firstMedia) {
         setError("Failed to load the first asset. Cannot start slideshow.");
         setIsLoading(false);
-        setPlaylist(mutablePlaylist); // Update playlist even on failure
-        if (mutablePlaylist.length === 0 && !isFetching) {
-          setIsFetching(true);
-        }
         return;
       }
       
@@ -177,12 +154,12 @@ export function useSlideshow(immich: ImmichHook) {
       // Preload the next one immediately
       const updatedPlaylist = await preloadNextAsset(mutablePlaylist);
       setPlaylist(updatedPlaylist);
-
       setIsLoading(false);
     };
 
     startSlideshow();
-  }, [playlist, isLoading, isFetching, getAssetWithRetry, preloadNextAsset, currentMedia]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialError]);
 
 
   // Save current asset's date to local storage whenever it changes.
@@ -244,22 +221,40 @@ export function useSlideshow(immich: ImmichHook) {
   
   // --- UI Event Handlers ---
 
-  const handleTimelineChange = useCallback((date: Date | null) => {
+  const handleTimelineChange = useCallback(async (date: Date | null) => {
     if (date) {
         localStorage.setItem(LOCAL_STORAGE_DATE_KEY, date.toISOString());
     } else {
         localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
     }
+    
+    // Reset state and re-initialize
     setPlaylist([]);
     setCurrentMedia(null);
     setNextMedia(null);
     setIsLoading(true);
-    setIsFetching(true);
+
+    const newAssets = await fetchAssets(null);
+    if (newAssets && newAssets.length > 0) {
+        let mutablePlaylist = [...newAssets];
+        const firstAsset = mutablePlaylist.shift();
+        if (firstAsset) {
+            const firstMedia = await getAssetWithRetry(firstAsset);
+            setCurrentMedia(firstMedia);
+            const restOfPlaylist = await preloadNextAsset(mutablePlaylist);
+            setPlaylist(restOfPlaylist);
+        }
+    } else {
+        setError("No photos found for the selected date.");
+    }
+
+    setIsLoading(false);
+
     toast({
         title: date ? "Timeline Set" : "Timeline Reset",
         description: date ? `Searching for photos before ${date.toLocaleDateString()}.` : "Restarting from the most recent photos.",
     });
-  }, [toast]);
+  }, [fetchAssets, getAssetWithRetry, preloadNextAsset, toast]);
 
   return {
     currentMedia,
