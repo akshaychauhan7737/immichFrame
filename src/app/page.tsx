@@ -187,7 +187,7 @@ export default function Home() {
     }
     
     // If we're near the end of the current playlist, start fetching the next page.
-    if (playlist.length > 0 && assetIndex >= playlist.length - 5 && !isFetching) {
+    if (playlist.length > 0 && assetIndex === playlist.length - 5 && !isFetching) {
         setIsFetching(true); // Trigger fetch
     }
     
@@ -728,5 +728,7 @@ export default function Home() {
     </main>
   );
 }
+
+    
 
     
