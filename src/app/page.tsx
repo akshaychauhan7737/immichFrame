@@ -773,7 +773,7 @@ export default function Home() {
         {/* Left Box: Time and Progress */}
         <div className="flex items-end gap-4">
             <div className="w-[180px] space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm">
-                <div className="text-3xl font-semibold">
+                <div className="text-4xl font-semibold">
                     {currentTime}
                 </div>
                 <div className="text-base font-medium text-white/90">
