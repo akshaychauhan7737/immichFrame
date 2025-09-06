@@ -250,6 +250,8 @@ export default function Home() {
             preloadNextAsset(finalIndex + 1);
         } else {
             setError("Failed to load any assets from the playlist.");
+            await delay(RETRY_DELAY);
+            setIsFetching(true); // Try fetching new data
         }
     }
     
@@ -278,6 +280,7 @@ export default function Home() {
   }, [takenBefore]);
 
   const handleDateReset = useCallback(() => {
+    localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
     setTakenBefore(null);
     setPlaylist([]);
     setAssetIndex(0);
@@ -292,7 +295,9 @@ export default function Home() {
 
   const handleDateSelect = useCallback((date: Date | undefined) => {
     if (date) {
-        setTakenBefore(date.toISOString());
+        const newDate = date.toISOString();
+        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, newDate);
+        setTakenBefore(newDate);
         setPlaylist([]);
         setAssetIndex(0);
         setCurrentMedia(null);
@@ -418,7 +423,7 @@ export default function Home() {
         fetchAssets();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configError, isFetching, isLoading, takenBefore]);
+  }, [configError, isFetching, isLoading]);
 
   // Initial asset load
   useEffect(() => {
@@ -805,5 +810,7 @@ export default function Home() {
     </main>
   );
 }
+
+    
 
     
