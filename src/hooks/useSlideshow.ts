@@ -44,6 +44,13 @@ export function useSlideshow(immich: ImmichHook) {
 
 
   // --- Core Slideshow Logic ---
+  const setCurrentMediaAndMarkVisited = useCallback((media: MediaAsset | null) => {
+    setCurrentMedia(media);
+    if (media?.asset?.fileCreatedAt) {
+      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, media.asset.fileCreatedAt);
+    }
+  }, []);
+
   const preloadNextAsset = useCallback(async (currentPlaylist: ImmichAsset[]) => {
     let mutablePlaylist = [...currentPlaylist];
     let nextAssetToLoad = mutablePlaylist.shift();
@@ -90,7 +97,7 @@ export function useSlideshow(immich: ImmichHook) {
 
       if (nextMedia) {
         // Promote next to current
-        setCurrentMedia({ ...nextMedia });
+        setCurrentMediaAndMarkVisited({ ...nextMedia });
 
         // Preload the next asset and update the playlist
         const updatedPlaylist = await preloadNextAsset(playlist);
@@ -110,7 +117,7 @@ export function useSlideshow(immich: ImmichHook) {
       
       setIsFading(false);
     });
-  }, [nextMedia, playlist, currentMedia, preloadNextAsset, revokeAssetUrls, isFading]);
+  }, [nextMedia, playlist, currentMedia, preloadNextAsset, revokeAssetUrls, isFading, setCurrentMediaAndMarkVisited]);
   
   // --- Effects ---
 
@@ -149,7 +156,7 @@ export function useSlideshow(immich: ImmichHook) {
         return;
       }
       
-      setCurrentMedia(firstMedia);
+      setCurrentMediaAndMarkVisited(firstMedia);
       
       // Preload the next one immediately
       const updatedPlaylist = await preloadNextAsset(mutablePlaylist);
@@ -159,15 +166,8 @@ export function useSlideshow(immich: ImmichHook) {
 
     startSlideshow();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialError]);
+  }, [initialError, setCurrentMediaAndMarkVisited]);
 
-
-  // Save current asset's date to local storage whenever it changes.
-  useEffect(() => {
-    if (currentMedia?.asset?.fileCreatedAt) {
-      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, currentMedia.asset.fileCreatedAt);
-    }
-  }, [currentMedia]);
   
   // Asset rotation timer for images
   useEffect(() => {
@@ -230,7 +230,7 @@ export function useSlideshow(immich: ImmichHook) {
     
     // Reset state and re-initialize
     setPlaylist([]);
-    setCurrentMedia(null);
+    setCurrentMediaAndMarkVisited(null);
     setNextMedia(null);
     setIsLoading(true);
 
@@ -240,7 +240,7 @@ export function useSlideshow(immich: ImmichHook) {
         const firstAsset = mutablePlaylist.shift();
         if (firstAsset) {
             const firstMedia = await getAssetWithRetry(firstAsset);
-            setCurrentMedia(firstMedia);
+            setCurrentMediaAndMarkVisited(firstMedia);
             const restOfPlaylist = await preloadNextAsset(mutablePlaylist);
             setPlaylist(restOfPlaylist);
         }
@@ -254,7 +254,7 @@ export function useSlideshow(immich: ImmichHook) {
         title: date ? "Timeline Set" : "Timeline Reset",
         description: date ? `Searching for photos before ${date.toLocaleDateString()}.` : "Restarting from the most recent photos.",
     });
-  }, [fetchAssets, getAssetWithRetry, preloadNextAsset, toast]);
+  }, [fetchAssets, getAssetWithRetry, preloadNextAsset, toast, setCurrentMediaAndMarkVisited]);
 
   return {
     currentMedia,
