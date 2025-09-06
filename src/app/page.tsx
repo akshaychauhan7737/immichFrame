@@ -196,10 +196,6 @@ export default function Home() {
     }
     
     setCurrentMedia(nextMedia);
-
-    if (nextMedia.asset.createdAt) {
-        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextMedia.asset.createdAt);
-    }
     
     // Preload the next asset and update the playlist
     const remainingAssets = await preloadNextAsset(playlist);
@@ -220,6 +216,12 @@ export default function Home() {
     setIsFetching(true);
   }, []);
   
+  // Save the current asset's date to localStorage whenever it changes
+  useEffect(() => {
+    if (currentMedia?.asset?.createdAt) {
+      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, currentMedia.asset.createdAt);
+    }
+  }, [currentMedia]);
 
   // Main logic to fetch assets from search endpoint
   useEffect(() => {
@@ -280,6 +282,10 @@ export default function Home() {
         }
         
         setPlaylist(current => [...current, ...fetchedAssets]);
+        const lastAsset = fetchedAssets[fetchedAssets.length - 1];
+        if (lastAsset) {
+            setTakenBefore(lastAsset.createdAt);
+        }
         
       } catch (e: any) {
           setError(`Failed to connect to Immich server: ${e.message}`);
@@ -320,9 +326,6 @@ export default function Home() {
 
           if (firstMedia) {
               setCurrentMedia(firstMedia);
-               if (firstMedia.asset.createdAt) {
-                    localStorage.setItem(LOCAL_STORAGE_DATE_KEY, firstMedia.asset.createdAt);
-               }
           } else {
                setError("Failed to load any initial assets. Please check your connection and filters.");
                setIsLoading(false);
@@ -531,7 +534,7 @@ export default function Home() {
   
     const containerClasses = cn(
       "absolute inset-0 transition-opacity duration-500",
-      isFading ? 'opacity-0' : 'opacity-100'
+      media.id === currentMedia?.id && !isFading ? 'opacity-100' : 'opacity-0'
     );
   
     if (media.type === 'VIDEO') {
@@ -604,6 +607,8 @@ export default function Home() {
         </div>
       )}
       {renderMedia(currentMedia)}
+      {/* Pre-render next media to have it ready for fading in */}
+      {nextMedia && renderMedia(nextMedia)}
 
       {/* Top Left: Air Pollution */}
       {airPollution && aqiInfo && (
@@ -738,3 +743,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
