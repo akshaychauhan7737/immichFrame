@@ -195,11 +195,6 @@ export default function Home() {
         URL.revokeObjectURL(currentMedia.url);
     }
     
-    // Unconditionally save the new asset's date to local storage
-    if (nextMedia.asset.createdAt) {
-      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextMedia.asset.createdAt);
-    }
-    
     setCurrentMedia(nextMedia);
     
     // Preload the next asset and update the playlist
@@ -220,6 +215,14 @@ export default function Home() {
     }
     setIsFetching(true);
   }, []);
+  
+  // *** THE ONLY SOURCE OF TRUTH FOR SAVING THE DATE ***
+  // Unconditionally save the current asset's date to local storage whenever it changes.
+  useEffect(() => {
+    if (currentMedia?.asset?.createdAt) {
+      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, currentMedia.asset.createdAt);
+    }
+  }, [currentMedia]);
   
 
   // Main logic to fetch assets from search endpoint
@@ -281,10 +284,6 @@ export default function Home() {
         }
         
         setPlaylist(current => [...current, ...fetchedAssets]);
-        const lastAsset = fetchedAssets[fetchedAssets.length - 1];
-        if (lastAsset) {
-            setTakenBefore(lastAsset.createdAt);
-        }
         
       } catch (e: any) {
           setError(`Failed to connect to Immich server: ${e.message}`);
@@ -324,10 +323,6 @@ export default function Home() {
           }
 
           if (firstMedia) {
-              // Unconditionally save the first asset's date to local storage on start
-              if (firstMedia.asset.createdAt) {
-                localStorage.setItem(LOCAL_STORAGE_DATE_KEY, firstMedia.asset.createdAt);
-              }
               setCurrentMedia(firstMedia);
           } else {
                setError("Failed to load any initial assets. Please check your connection and filters.");
@@ -607,7 +602,7 @@ export default function Home() {
       )}
       {renderMedia(currentMedia)}
       {/* Pre-render next media to have it ready for fading in */}
-      {nextMedia && renderMedia(nextMedia)}
+      {renderMedia(nextMedia)}
 
       {/* Top Left: Air Pollution */}
       {airPollution && aqiInfo && (
