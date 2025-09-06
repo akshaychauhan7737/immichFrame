@@ -86,11 +86,11 @@ export function useImmich() {
         let url: string;
         if (asset.type === 'VIDEO') {
             url = type === 'original' 
-                ? `${API_BASE_URL}/assets/${asset.id}/original` 
+                ? `${API_BASE_URL}/assets/${asset.id}/video/playback`
                 : `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview`;
         } else { // IMAGE
              url = type === 'original'
-                ? `${API_BASE_URL}/assets/${asset.id}/original` 
+                ? `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview` // Use preview for original to support HEIC
                 : `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview`;
         }
 
@@ -125,8 +125,9 @@ export function useImmich() {
         let previewUrl: string | null = null;
         
         if (asset.type === 'IMAGE') {
+            // For images (especially HEIC), use preview for both to ensure compatibility
             previewUrl = await getAssetUrl(asset, 'preview');
-            originalUrl = previewUrl; // Use preview for both to ensure compatibility
+            originalUrl = previewUrl; 
         } else { // VIDEO
             [originalUrl, previewUrl] = await Promise.all([
                 getAssetUrl(asset, 'original'),
