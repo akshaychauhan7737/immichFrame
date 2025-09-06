@@ -28,6 +28,7 @@ export interface ImmichAsset {
     exposureTime?: number;
     lensModel?: string;
     city?: string;
+    state?: string;
     country?: string;
     [key: string]: any;
   }

@@ -67,6 +67,7 @@ type MediaAsset = {
   url: string;
   type: 'IMAGE' | 'VIDEO';
   asset: ImmichAsset;
+  previewUrl: string; // For video posters and image previews
 };
 
 export default function Home() {
@@ -101,12 +102,14 @@ export default function Home() {
   }, [currentMedia]);
 
   // --- Asset Fetching Logic ---
-  const getAssetUrl = useCallback(async (asset: ImmichAsset): Promise<string | null> => {
+  const getAssetUrl = useCallback(async (asset: ImmichAsset, type: 'original' | 'preview'): Promise<string | null> => {
     if (configError) return null;
 
     let url: string;
     if (asset.type === 'VIDEO') {
-        url = `${API_BASE_URL}/assets/${asset.id}/original`;
+        url = type === 'original' 
+            ? `${API_BASE_URL}/assets/${asset.id}/original` 
+            : `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview`;
     } else { // IMAGE
         url = `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview`;
     }
@@ -125,7 +128,7 @@ export default function Home() {
       clearTimeout(timeoutId);
 
       if (!res.ok) {
-        throw new Error(`Failed to fetch ${asset.type}: ${res.statusText}`);
+        throw new Error(`Failed to fetch ${asset.type} (${type}): ${res.statusText}`);
       }
       const blob = await res.blob();
       return URL.createObjectURL(blob);
@@ -139,7 +142,7 @@ export default function Home() {
                 description: `Loading ${asset.type} took too long.`,
             });
         } else {
-            console.error(`Error fetching asset ${asset.id}:`, e);
+            console.error(`Error fetching asset ${asset.id} (${type}):`, e);
             toast({
                 variant: "destructive",
                 title: "Asset Fetch Error",
@@ -151,13 +154,28 @@ export default function Home() {
   }, [configError, toast]);
   
   const getAssetWithRetry = useCallback(async (asset: ImmichAsset, retries = 1): Promise<MediaAsset | null> => {
-      let url = await getAssetUrl(asset);
-      if (url) return {
-          id: asset.id,
-          type: asset.type as 'IMAGE' | 'VIDEO',
-          url: url,
-          asset: asset,
-      };
+      let originalUrl: string | null = null;
+      let previewUrl: string | null = null;
+      
+      if (asset.type === 'VIDEO') {
+          [originalUrl, previewUrl] = await Promise.all([
+              getAssetUrl(asset, 'original'),
+              getAssetUrl(asset, 'preview')
+          ]);
+      } else {
+          previewUrl = await getAssetUrl(asset, 'preview');
+          originalUrl = previewUrl; // For images, original and preview are the same for our purpose
+      }
+
+      if (originalUrl && previewUrl) {
+           return {
+              id: asset.id,
+              type: asset.type as 'IMAGE' | 'VIDEO',
+              url: originalUrl,
+              previewUrl: previewUrl,
+              asset: asset,
+          };
+      }
       
       if (retries > 0) {
           toast({
@@ -212,6 +230,7 @@ export default function Home() {
     await delay(500); // Wait for fade-out
   
     const oldMediaUrl = currentMedia?.url;
+    const oldPreviewUrl = currentMedia?.previewUrl;
   
     // Promote next to current
     setCurrentMedia(nextMedia);
@@ -220,13 +239,16 @@ export default function Home() {
     const updatedPlaylist = await preloadNextAsset(playlist);
     setPlaylist(updatedPlaylist);
   
-    // Revoke the old URL after the transition
-    if (oldMediaUrl) {
+    // Revoke the old URLs after the transition
+    if (oldMediaUrl && oldMediaUrl !== oldPreviewUrl) {
       URL.revokeObjectURL(oldMediaUrl);
+    }
+    if (oldPreviewUrl) {
+       URL.revokeObjectURL(oldPreviewUrl);
     }
   
     setIsFading(false);
-  }, [nextMedia, playlist, currentMedia?.url, preloadNextAsset, isFetching]);
+  }, [nextMedia, playlist, currentMedia, preloadNextAsset, isFetching]);
 
 
   // --- Effects ---
@@ -371,6 +393,17 @@ export default function Home() {
 
     return () => clearTimeout(timer);
   }, [isLoading, currentMedia, advanceToNextAsset]);
+
+  // Force-play videos when they become the current media
+  useEffect(() => {
+    if (currentMedia?.type === 'VIDEO' && videoRef.current) {
+        videoRef.current.play().catch(error => {
+            console.error("Video play failed:", error);
+            // We might want to advance to the next asset if autoplay is blocked
+            // advanceToNextAsset(); 
+        });
+    }
+  }, [currentMedia]);
   
   // Fetch more assets when playlist runs low
   useEffect(() => {
@@ -535,7 +568,7 @@ export default function Home() {
     );
   }
   
-  const location = currentAsset?.exifInfo?.city;
+  const location = [currentAsset?.exifInfo?.city, currentAsset?.exifInfo?.state].filter(Boolean).join(', ');
   const dateString = currentAsset?.fileCreatedAt;
   const photoDate = dateString ? new Date(dateString) : null;
   const isDateValid = photoDate && !isNaN(photoDate.getTime());
@@ -559,17 +592,19 @@ export default function Home() {
         "absolute inset-0 transition-opacity duration-500",
         isVisible ? 'opacity-100' : 'opacity-0'
     );
+    
+    // Always use previewUrl for background image to ensure it's available for videos
+    const backgroundUrl = media.previewUrl;
 
     if (media.type === 'VIDEO') {
         return (
             <div className={containerClasses}>
-                <video
-                    src={media.url}
+                 <Image
+                    src={backgroundUrl}
+                    alt=""
                     aria-hidden="true"
-                    className="absolute object-cover blur-2xl scale-110 h-full w-full"
-                    autoPlay
-                    muted
-                    loop
+                    fill
+                    className="object-cover blur-2xl scale-110"
                 />
                 <div className="absolute inset-0 bg-black/50"></div>
                 <video
@@ -581,7 +616,6 @@ export default function Home() {
                             setProgress(0);
                         }
                     }}
-                    autoPlay={isCurrent}
                     muted
                     className="absolute object-contain h-full w-full"
                 />
