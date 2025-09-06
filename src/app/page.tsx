@@ -578,45 +578,42 @@ export default function Home() {
   const renderMedia = (media: MediaAsset | null) => {
     if (!media) return null;
 
-    const commonProps = {
-        key: media.id,
-        src: media.url,
-        className: cn("transition-opacity duration-500", isFading ? 'opacity-0' : 'opacity-100')
-    };
-
     if (media.type === 'VIDEO') {
         return (
-            <>
+            <div key={media.id} className={cn("transition-opacity duration-500", isFading ? 'opacity-0' : 'opacity-100')}>
                 <video
                     key={`${media.id}-bg`}
                     src={media.url}
                     aria-hidden="true"
-                    className={cn(commonProps.className, "absolute object-cover blur-2xl scale-110 h-full w-full")}
+                    className="absolute object-cover blur-2xl scale-110 h-full w-full"
                     autoPlay
                     muted
                     loop
                 />
-                 <div className="absolute inset-0 bg-black/50"></div>
+                <div className="absolute inset-0 bg-black/50"></div>
                 <video
                     ref={videoRef}
                     key={media.id}
                     src={media.url}
                     onEnded={advanceToNextAsset}
                     onLoadedData={() => {
-                        // This forces a re-render to update duration for progress bar
-                        if(videoRef.current) {
-                           // Force a state update to re-evaluate the progress bar duration
+                        if (videoRef.current) {
                            setProgress(0);
                         }
                     }}
                     autoPlay
                     muted
-                    className={cn(commonProps.className, "absolute object-contain h-full w-full")}
+                    className="absolute object-contain h-full w-full"
                 />
-            </>
-        )
+            </div>
+        );
     }
     
+    // Common props for images, now handled inside the return for clarity
+    const commonImageProps = {
+        className: cn("transition-opacity duration-500", isFading ? 'opacity-0' : 'opacity-100')
+    };
+
     return (
         <>
             <Image
@@ -625,7 +622,7 @@ export default function Home() {
                 alt=""
                 aria-hidden="true"
                 fill
-                className={cn(commonProps.className, "object-cover blur-2xl scale-110")}
+                className={cn(commonImageProps.className, "object-cover blur-2xl scale-110")}
             />
             <div className="absolute inset-0 bg-black/50"></div>
             <Image
@@ -633,7 +630,7 @@ export default function Home() {
                 src={media.url}
                 alt="Immich Photo"
                 fill
-                className={cn(commonProps.className, "object-contain")}
+                className={cn(commonImageProps.className, "object-contain")}
                 priority
             />
         </>
