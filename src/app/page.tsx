@@ -175,24 +175,34 @@ export default function Home() {
 
   const advanceToNextAsset = useCallback(async () => {
     if (playlist.length === 0) return;
-
+  
     setIsFading(true);
     await delay(500); // Wait for fade-out
-
+  
     if (currentMedia?.url) {
       URL.revokeObjectURL(currentMedia.url);
     }
     
-    let nextIndex = (assetIndex + 1) % playlist.length;
+    let nextIndex = assetIndex;
+    if (playlist.length > 1) {
+      // Pick a random index, but not the same as the current one
+      do {
+        nextIndex = Math.floor(Math.random() * playlist.length);
+      } while (nextIndex === assetIndex);
+    } else {
+      nextIndex = 0;
+    }
     
-    // If we're near the end of the playlist, start fetching the next page
-    if (playlist.length > 0 && playlist.length - nextIndex < 5 && (playlist.length % ASSET_FETCH_PAGE_SIZE === 0)) {
+    // If we're near the end of the *original* playlist order, start fetching the next page.
+    // This uses the index of the current asset in the playlist.
+    const currentIndexInPlaylist = playlist.findIndex(p => p.id === currentMedia?.id);
+    if (playlist.length > 0 && playlist.length - currentIndexInPlaylist < 5 && (playlist.length % ASSET_FETCH_PAGE_SIZE === 0)) {
       setFetchPage(p => p + 1);
     }
     
     let nextAsset = playlist[nextIndex];
     let newUrl = null;
-
+  
     // Loop to find a loadable asset
     let attempts = 0;
     while(!newUrl && attempts < playlist.length) {
@@ -201,7 +211,10 @@ export default function Home() {
         newUrl = await getAssetWithRetry(nextAsset);
       }
       if (!newUrl) {
-        nextIndex = (nextIndex + 1) % playlist.length;
+        // If loading fails, pick another random asset
+        do {
+          nextIndex = Math.floor(Math.random() * playlist.length);
+        } while (nextIndex === assetIndex);
         attempts++;
       }
     }
@@ -216,9 +229,9 @@ export default function Home() {
     } else {
         setError("Failed to load any assets from the playlist.");
     }
-
+  
     setIsFading(false);
-
+  
   }, [assetIndex, playlist, getAssetWithRetry, currentMedia]);
 
 
@@ -317,7 +330,7 @@ export default function Home() {
             return true;
         });
 
-        const newPlaylist = fetchPage === 1 ? shuffleArray(filteredAssets) : [...playlist, ...shuffleArray(filteredAssets)];
+        const newPlaylist = fetchPage === 1 ? shuffleArray(filteredAssets) : [...playlist, ...filteredAssets];
 
         if (playlist.length === 0 && newPlaylist.length > 0) {
              setPlaylist(newPlaylist);
