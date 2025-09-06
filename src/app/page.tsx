@@ -651,7 +651,7 @@ export default function Home() {
       {/* Top Left: Air Pollution */}
       {airPollution && aqiInfo && (
         <div className="pointer-events-none absolute top-4 left-4 text-white">
-            <div className="space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm text-left">
+            <div className="relative space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm text-left">
                 <div className="flex items-center gap-3">
                     <Wind size={32} />
                     <div className='flex items-baseline gap-2'>
@@ -664,6 +664,36 @@ export default function Home() {
                     <span>NO₂: {airPollution.components.no2.toFixed(1)}</span>
                     <span>PM10: {airPollution.components.pm10.toFixed(1)}</span>
                     <span>SO₂: {airPollution.components.so2.toFixed(1)}</span>
+                </div>
+
+                <div className="absolute bottom-1 right-1">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="ghost" size="icon" className='pointer-events-auto h-8 w-8 text-white/50 hover:text-white hover:bg-black/30 backdrop-blur-sm'>
+                            <Settings className="h-4 w-4" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto">
+                            <div className="grid gap-4">
+                                <div className="space-y-2">
+                                    <h4 className="font-medium leading-none">Timeline Settings</h4>
+                                    <p className="text-sm text-muted-foreground">
+                                        Control which photos are displayed.
+                                    </p>
+                                </div>
+                                <div className='flex flex-col items-center gap-2'>
+                                    <CalendarPicker
+                                        mode="single"
+                                        onSelect={handleDateSelect}
+                                        initialFocus
+                                    />
+                                    <Button variant="outline" onClick={handleDateReset} className='w-full'>
+                                        Reset to Latest
+                                    </Button>
+                                </div>
+                            </div>
+                        </PopoverContent>
+                    </Popover>
                 </div>
             </div>
         </div>
@@ -700,49 +730,16 @@ export default function Home() {
           </div>
       )}
 
-       {/* Bottom Left: Settings */}
-       <div className="absolute bottom-4 left-4 flex items-end gap-4" style={{left: 'calc(1rem + 250px)'}}>
-          <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" className='pointer-events-auto h-10 w-10 text-white/50 hover:text-white hover:bg-black/30 backdrop-blur-sm'>
-                  <Settings className="h-6 w-6" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto">
-                  <div className="grid gap-4">
-                      <div className="space-y-2">
-                          <h4 className="font-medium leading-none">Timeline Settings</h4>
-                          <p className="text-sm text-muted-foreground">
-                              Control which photos are displayed.
-                          </p>
-                      </div>
-                      <div className='flex flex-col items-center gap-2'>
-                          <CalendarPicker
-                              mode="single"
-                              onSelect={handleDateSelect}
-                              initialFocus
-                          />
-                          <Button variant="outline" onClick={handleDateReset} className='w-full'>
-                              Reset to Latest
-                          </Button>
-                      </div>
-                  </div>
-              </PopoverContent>
-          </Popover>
-      </div>
-
-
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-4 md:p-6 text-white">
         {/* Left Box: Time and Progress */}
         <div className="flex items-end gap-4">
-            <div className="w-[250px] space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-sm">
-                <div className="text-5xl font-semibold md:text-7xl">
+            <div className="w-[250px] space-y-1 rounded-lg bg-black/30 p-4 backdrop-blur-sm">
+                <div className="text-5xl font-semibold">
                     {currentTime}
                 </div>
-                <div className="text-2xl md:text-3xl font-medium text-white/90">
+                <div className="text-2xl font-medium text-white/90">
                     {currentDate}
                 </div>
-
                 <div className="w-full pt-2">
                     <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white" />
                 </div>
