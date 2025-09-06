@@ -14,6 +14,7 @@ export interface ImmichAsset {
   mimeType: string | null;
   duration: string; // e.g., "00:00:09.123456"
   isArchived: boolean;
+  fileCreatedAt: string;
   exifInfo?: {
     make?: string;
     model?: string;

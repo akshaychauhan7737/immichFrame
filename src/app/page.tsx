@@ -219,8 +219,8 @@ export default function Home() {
   // *** THE ONLY SOURCE OF TRUTH FOR SAVING THE DATE ***
   // Unconditionally save the current asset's date to local storage whenever it changes.
   useEffect(() => {
-    if (currentMedia?.asset?.createdAt) {
-      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, currentMedia.asset.createdAt);
+    if (currentMedia?.asset?.fileCreatedAt) {
+      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, currentMedia.asset.fileCreatedAt);
     }
   }, [currentMedia]);
   
@@ -296,7 +296,7 @@ export default function Home() {
     if (isFetching) {
         fetchAssets();
     }
-  }, [configError, isFetching, takenBefore, IS_FAVORITE_ONLY, IS_ARCHIVED_INCLUDED]);
+  }, [configError, isFetching, takenBefore]);
 
   // Trigger fetch when playlist runs low
   useEffect(() => {
@@ -527,12 +527,12 @@ export default function Home() {
     exif?.iso ? `ISO ${exif.iso}` : null,
   ].filter(Boolean).join(' • ');
 
-  const renderMedia = (media: MediaAsset | null) => {
+  const renderMedia = (media: MediaAsset | null, isCurrent: boolean) => {
     if (!media) return null;
   
     const containerClasses = cn(
       "absolute inset-0 transition-opacity duration-500",
-      media.id === currentMedia?.id && !isFading ? 'opacity-100' : 'opacity-0'
+      isCurrent && !isFading ? 'opacity-100' : 'opacity-0'
     );
   
     if (media.type === 'VIDEO') {
@@ -600,9 +600,8 @@ export default function Home() {
           </Alert>
         </div>
       )}
-      {renderMedia(currentMedia)}
-      {/* Pre-render next media to have it ready for fading in */}
-      {renderMedia(nextMedia)}
+      {renderMedia(currentMedia, true)}
+      {renderMedia(nextMedia, false)}
 
       {/* Top Left: Air Pollution */}
       {airPollution && aqiInfo && (
