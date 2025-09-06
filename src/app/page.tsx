@@ -75,7 +75,6 @@ export default function Home() {
   
   // --- State Management ---
   const [playlist, setPlaylist] = useState<ImmichAsset[]>([]);
-  const [takenBefore, setTakenBefore] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState('');
@@ -274,12 +273,8 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [urlsToRevoke]);
   
-  // Load date from localStorage on mount and trigger initial fetch
+  // Trigger initial fetch on mount
   useEffect(() => {
-    const savedDate = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
-    if (savedDate && savedDate !== 'undefined') {
-        setTakenBefore(savedDate);
-    }
     setIsFetching(true);
   }, []);
   
@@ -303,6 +298,9 @@ export default function Home() {
 
       setError(null);
       
+      // Use local storage as the single source of truth for the 'takenBefore' date.
+      const takenBefore = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
+
       try {
         const requestBody: any = {
               withExif: true,
@@ -312,7 +310,7 @@ export default function Home() {
               sort: 'DESC',
         };
         
-        if (takenBefore) {
+        if (takenBefore && takenBefore !== 'undefined') {
             requestBody.takenBefore = takenBefore;
         }
 
@@ -335,12 +333,11 @@ export default function Home() {
         const fetchedAssets: ImmichAsset[] = data.assets.items || [];
         
         if (fetchedAssets.length === 0) {
-            if (takenBefore) {
-                // Reached the end, loop back
+            if (takenBefore && takenBefore !== 'undefined') {
+                // Reached the end, loop back by clearing the date from local storage
                 console.log("No more assets found, starting from the beginning.");
-                setTakenBefore(null);
                 localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
-                // isFetching will be set to true at the end of this function, triggering another fetch
+                // The next fetch cycle will automatically start from the latest assets.
             } else {
                 // No assets found at all
                 setError(`No photos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
@@ -362,7 +359,7 @@ export default function Home() {
     if (isFetching) {
         fetchAssets();
     }
-  }, [configError, isFetching, takenBefore]);
+  }, [configError, isFetching]);
 
   // Initial asset load and starting the slideshow
   useEffect(() => {
@@ -389,6 +386,10 @@ export default function Home() {
         if (!firstMediaResult) {
             setError("Failed to load the first asset. Cannot start slideshow.");
             setIsLoading(false);
+            // Re-trigger fetch if initial load fails and playlist is now empty
+            if (mutablePlaylist.length === 0) {
+              setIsFetching(true);
+            }
             return;
         }
 
@@ -420,22 +421,21 @@ export default function Home() {
     if (currentMedia?.type === 'VIDEO' && videoRef.current) {
         videoRef.current.play().catch(error => {
             console.error("Video play failed:", error);
-            // We might want to advance to the next asset if autoplay is blocked
-            // advanceToNextAsset(); 
+            // If autoplay is blocked, advance to the next asset.
+            advanceToNextAsset(); 
         });
     }
-  }, [currentMedia]);
+  }, [currentMedia, advanceToNextAsset]);
   
   // Fetch more assets when playlist runs low
   useEffect(() => {
-    if (!isFetching && playlist.length > 0 && playlist.length < PLAYLIST_FETCH_THRESHOLD) {
+    if (!isFetching && !isLoading && playlist.length < PLAYLIST_FETCH_THRESHOLD) {
       setIsFetching(true);
     }
-  }, [playlist.length, isFetching]);
+  }, [playlist.length, isFetching, isLoading]);
 
   const handleDateReset = useCallback(() => {
     localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
-    setTakenBefore(null);
     setPlaylist([]);
     setCurrentMedia(null);
     setNextMedia(null);
@@ -454,7 +454,6 @@ export default function Home() {
         localStorage.setItem(LOCAL_STORAGE_DATE_KEY, newDate);
         
         // Reset state to force a complete reload from the new date
-        setTakenBefore(newDate);
         setPlaylist([]);
         setCurrentMedia(null);
         setNextMedia(null);
@@ -615,7 +614,6 @@ export default function Home() {
         isVisible ? 'opacity-100' : 'opacity-0'
     );
     
-    // Always use previewUrl for background image to ensure it's available for videos
     const backgroundUrl = media.previewUrl;
 
     if (media.type === 'VIDEO') {
@@ -821,5 +819,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
