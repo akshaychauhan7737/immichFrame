@@ -19,7 +19,7 @@ const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '150
 const RETRY_DELAY = 5000; // 5 seconds
 const WEATHER_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const AIR_POLLUTION_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
-const ASSET_FETCH_PAGE_SIZE = 10;
+const ASSET_FETCH_PAGE_SIZE = 25;
 const LOCAL_STORAGE_DATE_KEY = 'immich-view-taken-before';
 
 // --- Environment Variable-based Configuration ---
@@ -65,6 +65,7 @@ type MediaAsset = {
   id: string;
   url: string;
   type: 'IMAGE' | 'VIDEO';
+  asset: ImmichAsset;
 };
 
 export default function Home() {
@@ -95,9 +96,8 @@ export default function Home() {
   }, []);
   
   const currentAsset = useMemo(() => {
-    if (!currentMedia) return null;
-    return playlist.find(asset => asset.id === currentMedia.id);
-  }, [playlist, currentMedia]);
+    return currentMedia?.asset;
+  }, [currentMedia]);
 
   // --- Asset Fetching Logic ---
   const getAssetUrl = useCallback(async (asset: ImmichAsset): Promise<string | null> => {
@@ -139,6 +139,7 @@ export default function Home() {
           id: asset.id,
           type: asset.type as 'IMAGE' | 'VIDEO',
           url: url,
+          asset: asset,
       };
       
       if (retries > 0) {
@@ -158,133 +159,78 @@ export default function Home() {
       return null;
   }, [getAssetUrl, toast]);
 
-    const preloadNextAsset = useCallback(async (currentIndex: number) => {
-        if (playlist.length === 0) return;
 
-        let attempts = 0;
-        let preloadedAsset: MediaAsset | null = null;
-        let nextIndex = (currentIndex + 1) % playlist.length;
-        
-        while (!preloadedAsset && attempts < playlist.length) {
-            const nextAsset = playlist[nextIndex];
-            if (nextAsset) {
-                preloadedAsset = await getAssetWithRetry(nextAsset);
-            }
-            if (!preloadedAsset) {
-                // If an asset fails to preload, skip it and try the next one
-                attempts++;
-                nextIndex = (nextIndex + 1) % playlist.length;
-            }
-        }
-        
-        setNextMedia(preloadedAsset);
+  const preloadNextAsset = useCallback(async (assetList: ImmichAsset[]) => {
+      if (assetList.length === 0) {
+          setNextMedia(null);
+          return assetList;
+      }
+      
+      let nextAsset: ImmichAsset | undefined;
+      let preloadedMedia: MediaAsset | null = null;
+      let remainingAssets = [...assetList];
 
-    }, [playlist, getAssetWithRetry]);
+      while (!preloadedMedia && remainingAssets.length > 0) {
+          nextAsset = remainingAssets.shift(); // Take asset from the front
+          if (nextAsset) {
+              preloadedMedia = await getAssetWithRetry(nextAsset);
+          }
+      }
+      
+      setNextMedia(preloadedMedia);
+      return remainingAssets; // Return the list without the preloaded asset
+  }, [getAssetWithRetry]);
+
 
   const advanceToNextAsset = useCallback(async () => {
-    if (playlist.length === 0 || !nextMedia) {
-      // If there's nothing to advance to, try fetching more assets.
-      if (!isFetching) {
-        setIsFetching(true);
-      }
+    if (!nextMedia) {
+      if (!isFetching) setIsFetching(true);
       return;
     }
 
     setIsFading(true);
-    await delay(500); // Wait for fade-out
+    await delay(500);
 
     if (currentMedia?.url) {
         URL.revokeObjectURL(currentMedia.url);
     }
     
-    // The next media is already preloaded, so we can just use it.
-    const newCurrentMedia = nextMedia;
-    setCurrentMedia(newCurrentMedia);
-    setNextMedia(null); // Clear preloaded
+    setCurrentMedia(nextMedia);
 
-    const nextAssetInPlaylist = playlist.find(asset => asset.id === newCurrentMedia.id);
-    if (nextAssetInPlaylist && nextAssetInPlaylist.createdAt) {
-        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextAssetInPlaylist.createdAt);
-    }
-
-    const newIndex = playlist.findIndex(asset => asset.id === newCurrentMedia.id);
-    if (newIndex >= 0) {
-      preloadNextAsset(newIndex);
+    if (nextMedia.asset.createdAt) {
+        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextMedia.asset.createdAt);
     }
     
-    setIsFading(false);
+    // Preload the next asset and update the playlist
+    const remainingAssets = await preloadNextAsset(playlist);
+    setPlaylist(remainingAssets);
 
-}, [playlist, currentMedia, nextMedia, preloadNextAsset, isFetching]);
+    setIsFading(false);
+  }, [nextMedia, currentMedia, playlist, preloadNextAsset, isFetching]);
 
 
   // --- Effects ---
-
-  // Load date from localStorage on mount
+  
+  // Load date from localStorage on mount and trigger initial fetch
   useEffect(() => {
     const savedDate = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
     if (savedDate && savedDate !== 'undefined') {
         setTakenBefore(savedDate);
     }
     setIsFetching(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
-  // Logic to fetch more assets when the playlist is running low
-  useEffect(() => {
-    if (isFetching || !currentMedia || playlist.length === 0) {
-      return;
-    }
-
-    const currentIndex = playlist.findIndex(a => a.id === currentMedia.id);
-    
-    // If we are near the end of the playlist, fetch more assets
-    if (currentIndex >= 0 && playlist.length - currentIndex < 5) {
-      setIsFetching(true);
-    }
-  }, [currentMedia, playlist, isFetching]);
-
-
-  const handleDateReset = useCallback(() => {
-    localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
-    setTakenBefore(null);
-    setPlaylist([]);
-    setCurrentMedia(null);
-    setNextMedia(null);
-    setIsFetching(true); // Trigger a re-fetch from the beginning
-    toast({
-        title: "Timeline Reset",
-        description: "Slideshow will restart from the most recent photos.",
-    });
-  }, [toast]);
-
-  const handleDateSelect = useCallback((date: Date | undefined) => {
-    if (date) {
-        const newDate = date.toISOString();
-        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, newDate);
-        setTakenBefore(newDate);
-        setPlaylist([]);
-        setCurrentMedia(null);
-        setNextMedia(null);
-        setIsFetching(true); // Trigger a re-fetch from the selected date
-        toast({
-            title: "Timeline Set",
-            description: `Searching for photos taken before ${format(date, 'PPP')}.`,
-        });
-    }
-  }, [toast]);
-
 
   // Main logic to fetch assets from search endpoint
   useEffect(() => {
-    if (configError) {
-      setError(configError);
-      setIsLoading(false);
-      return;
-    }
-
     const fetchAssets = async () => {
-      // Only show initial loader if playlist is empty
-      if (playlist.length === 0) setIsLoading(true);
+      if (configError) {
+        setError(configError);
+        setIsLoading(false);
+        setIsFetching(false);
+        return;
+      }
+
       setError(null);
       
       try {
@@ -295,10 +241,9 @@ export default function Home() {
               size: ASSET_FETCH_PAGE_SIZE,
               sort: 'DESC',
         };
-
-        const dateToFetch = takenBefore;
-        if (dateToFetch) {
-            requestBody.takenBefore = dateToFetch;
+        
+        if (takenBefore) {
+            requestBody.takenBefore = takenBefore;
         }
 
         const response = await fetch(`${PROXY_URL}/search/metadata`, {
@@ -319,77 +264,81 @@ export default function Home() {
         const data = await response.json();
         const fetchedAssets: ImmichAsset[] = data.assets.items || [];
         
-        if (fetchedAssets.length === 0 && dateToFetch) {
-            console.log("No more assets found, starting from the beginning.");
-            localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
-            setTakenBefore(null);
-            // Setting isFetching here will trigger a re-fetch in this same useEffect
-            setIsFetching(true); 
+        if (fetchedAssets.length === 0) {
+            if (takenBefore) {
+                // Reached the end, loop back
+                console.log("No more assets found, starting from the beginning.");
+                setTakenBefore(null);
+                localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
+                // Trigger another fetch from the beginning
+                setIsFetching(true); 
+            } else {
+                // No assets found at all
+                setError(`No photos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
+                setIsLoading(false);
+            }
             return;
         }
-
-        if (playlist.length === 0 && fetchedAssets.length === 0) {
-          setError(`No photos found matching your filters (favorites_only: ${IS_FAVORITE_ONLY}, archived_included: ${IS_ARCHIVED_INCLUDED}).`);
-          setIsLoading(false);
-          return;
-        }
         
-        if (fetchedAssets.length > 0) {
-            const existingIds = new Set(playlist.map(a => a.id));
-            const uniqueNewAssets = fetchedAssets.filter(a => !existingIds.has(a.id));
-            const newPlaylist = [...playlist, ...uniqueNewAssets];
-            setPlaylist(newPlaylist);
-        }
+        setPlaylist(current => [...current, ...fetchedAssets]);
         
       } catch (e: any) {
           setError(`Failed to connect to Immich server: ${e.message}`);
           await delay(RETRY_DELAY);
           setIsFetching(true); // Retry after a delay
       } finally {
-          setIsLoading(false);
           setIsFetching(false);
       }
     };
     
-    if (!configError && isFetching) {
+    if (isFetching) {
         fetchAssets();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configError, isFetching]);
+  }, [configError, isFetching, takenBefore]);
 
-  // Initial asset load
+  // Trigger fetch when playlist runs out
   useEffect(() => {
-    if (!isLoading && !currentMedia && playlist.length > 0) {
-        const loadInitialAsset = async () => {
-            const asset = playlist[0];
-            if (asset) {
-                const mediaAsset = await getAssetWithRetry(asset);
-                if (mediaAsset) {
-                    setCurrentMedia(mediaAsset);
-                    if (asset.createdAt) {
-                        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, asset.createdAt);
-                    }
-                    preloadNextAsset(0);
-                } else {
-                    // If first asset fails, try to advance to the next one
-                    await delay(RETRY_DELAY);
-                    // Manually trigger advance logic if preloading fails
-                     const nextIndex = 1 % playlist.length;
-                      let newAsset: MediaAsset | null = null;
-                      if(playlist[nextIndex]) {
-                        newAsset = await getAssetWithRetry(playlist[nextIndex]);
-                      }
-                      if(newAsset) {
-                        setCurrentMedia(newAsset);
-                        preloadNextAsset(nextIndex);
-                      } else {
-                        setError("Failed to load initial assets.");
-                      }
-                }
-            }
-        };
-        loadInitialAsset();
+    if (!isFetching && playlist.length === 0 && currentMedia && !isLoading) {
+      console.log("Playlist is empty, fetching more assets.");
+      setIsFetching(true);
     }
+  }, [playlist, isFetching, currentMedia, isLoading]);
+
+
+  // Initial asset load and starting the slideshow
+  useEffect(() => {
+      const startSlideshow = async () => {
+          if (playlist.length === 0) return;
+
+          // Preload first asset
+          let assetsForFirstLoad = [...playlist];
+          let firstMedia: MediaAsset | null = null;
+          while(!firstMedia && assetsForFirstLoad.length > 0) {
+              const asset = assetsForFirstLoad.shift();
+              if (asset) firstMedia = await getAssetWithRetry(asset);
+          }
+
+          if (!firstMedia) {
+              setError("Failed to load initial asset.");
+              setIsLoading(false);
+              return;
+          }
+
+          // Preload second asset
+          const remainingAssets = await preloadNextAsset(assetsForFirstLoad);
+
+          // Start the show
+          setCurrentMedia(firstMedia);
+          if (firstMedia.asset.createdAt) {
+              localStorage.setItem(LOCAL_STORAGE_DATE_KEY, firstMedia.asset.createdAt);
+          }
+          setPlaylist(remainingAssets);
+          setIsLoading(false);
+      };
+
+      if (!isLoading && !currentMedia && playlist.length > 0) {
+          startSlideshow();
+      }
   }, [isLoading, currentMedia, playlist, getAssetWithRetry, preloadNextAsset]);
 
 
@@ -404,6 +353,36 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [isLoading, currentMedia, advanceToNextAsset]);
   
+
+  const handleDateReset = useCallback(() => {
+    localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
+    setTakenBefore(null);
+    setPlaylist([]);
+    setCurrentMedia(null);
+    setNextMedia(null);
+    setIsFetching(true);
+    toast({
+        title: "Timeline Reset",
+        description: "Slideshow will restart from the most recent photos.",
+    });
+  }, [toast]);
+
+  const handleDateSelect = useCallback((date: Date | undefined) => {
+    if (date) {
+        const newDate = date.toISOString();
+        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, newDate);
+        setTakenBefore(newDate);
+        setPlaylist([]);
+        setCurrentMedia(null);
+        setNextMedia(null);
+        setIsFetching(true);
+        toast({
+            title: "Timeline Set",
+            description: `Searching for photos taken before ${format(date, 'PPP')}.`,
+        });
+    }
+  }, [toast]);
+
 
   // Progress bar animation
   useEffect(() => {
@@ -504,7 +483,7 @@ export default function Home() {
   
   // --- Render Logic ---
 
-  if (isLoading && playlist.length === 0) {
+  if (isLoading) {
     return (
       <div className="flex h-screen w-screen flex-col items-center justify-center bg-background text-foreground">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -525,20 +504,6 @@ export default function Home() {
     );
   }
   
-  if (playlist.length === 0 && !isLoading) {
-     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-background p-8">
-        <Alert className="max-w-md">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>No Media To Display</AlertTitle>
-          <AlertDescription>
-            Could not find any suitable photos on your Immich server. Check your configuration.
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
-
   const location = [currentAsset?.exifInfo?.city, currentAsset?.exifInfo?.country].filter(Boolean).join(', ');
   const dateString = currentAsset?.exifInfo?.dateTimeOriginal;
   const photoDate = dateString ? new Date(dateString) : null;
@@ -621,7 +586,18 @@ export default function Home() {
   return (
     <main className="relative h-screen w-screen overflow-hidden bg-black">
       {/* Media Container */}
-        {renderMedia(currentMedia)}
+      {!currentMedia && !isLoading && !isFetching && (
+        <div className="flex h-screen w-screen items-center justify-center bg-background p-8">
+          <Alert className="max-w-md">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>No Media To Display</AlertTitle>
+            <AlertDescription>
+              Could not find any suitable photos on your Immich server. Check your configuration.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+      {renderMedia(currentMedia)}
 
       {/* Top Left: Air Pollution */}
       {airPollution && aqiInfo && (
@@ -722,7 +698,7 @@ export default function Home() {
 
 
         {/* Right Box: Photo Details */}
-        {(isDateValid || location || camera || exif?.lensModel) && (
+        {currentAsset && (isDateValid || location || camera || exif?.lensModel) && (
           <div className="space-y-1.5 rounded-lg bg-black/30 p-4 backdrop-blur-sm text-right max-w-sm">
               <div className="flex flex-col items-end text-lg md:text-xl font-medium">
                   {isDateValid && photoDate && (
@@ -761,5 +737,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
