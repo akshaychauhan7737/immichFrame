@@ -25,7 +25,7 @@ const PLAYLIST_FETCH_THRESHOLD = 5; // Fetch more when playlist drops to this si
 const LOCAL_STORAGE_DATE_KEY = 'immich-view-taken-before';
 
 // --- Environment Variable-based Configuration ---
-const SERVER_URL_CONFIGURED = !!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
+const SERVER_URL = process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
 const API_KEY = process.env.NEXT_PUBLIC_IMMICH_API_KEY;
 const IS_FAVORITE_ONLY = process.env.NEXT_PUBLIC_IMMICH_IS_FAVORITE_ONLY === 'true';
 const IS_ARCHIVED_INCLUDED = process.env.NEXT_PUBLIC_IMMICH_INCLUDE_ARCHIVED === 'true';
@@ -33,7 +33,6 @@ const LATITUDE = process.env.NEXT_PUBLIC_LATITUDE;
 const LONGITUDE = process.env.NEXT_PUBLIC_LONGITUDE;
 const OPENWEATHER_API_KEY = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
 
-// Use the Next.js proxy to avoid CORS issues.
 const API_BASE_URL = '/api/immich';
 
 // --- Helper Functions ---
@@ -91,7 +90,7 @@ export default function Home() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const configError = useMemo(() => {
-    if (!SERVER_URL_CONFIGURED || !API_KEY) {
+    if (!SERVER_URL || !API_KEY) {
       return "Server URL or API Key is missing. Please check your environment variables.";
     }
     return null;
@@ -555,7 +554,7 @@ export default function Home() {
 
     if (media.type === 'VIDEO') {
         return (
-            <div key={media.id} className={containerClasses}>
+            <div className={containerClasses}>
                 <video
                     src={media.url}
                     aria-hidden="true"
@@ -583,7 +582,7 @@ export default function Home() {
     }
 
     return (
-        <div key={media.id} className={containerClasses}>
+        <div className={containerClasses}>
             <Image
                 src={media.url}
                 alt=""
@@ -620,8 +619,8 @@ export default function Home() {
       )}
       
       {/* Render current and next media for smooth transition */}
-      {renderMedia(currentMedia, true)}
-      {renderMedia(nextMedia, false)}
+      {currentMedia && renderMedia(currentMedia, true)}
+      {nextMedia && renderMedia(nextMedia, false)}
 
 
       {/* Top Left: Air Pollution */}
