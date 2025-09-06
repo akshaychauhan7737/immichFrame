@@ -233,7 +233,7 @@ export default function Home() {
     const oldMedia = currentMedia;
   
     // Promote next to current
-    setCurrentMedia(nextMedia);
+    setCurrentMedia({ ...nextMedia });
   
     // Preload the next asset and update the playlist
     const updatedPlaylist = await preloadNextAsset(playlist);
