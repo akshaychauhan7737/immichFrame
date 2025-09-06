@@ -50,6 +50,7 @@ export function useSlideshow(immich: ImmichHook) {
 
     if (!nextAssetToLoad) {
       setNextMedia(null);
+      setIsFetching(true); // Proactively fetch if playlist runs dry
       return mutablePlaylist;
     }
   
@@ -114,9 +115,7 @@ export function useSlideshow(immich: ImmichHook) {
 
     const performFetch = async () => {
       setError(null);
-      const takenBefore = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
-
-      const newAssets = await fetchAssets(takenBefore);
+      const newAssets = await fetchAssets();
 
       if (newAssets === null) {
         setError(`Failed to connect to Immich server.`);
@@ -127,20 +126,12 @@ export function useSlideshow(immich: ImmichHook) {
       }
       
       if (newAssets.length === 0) {
-        if (takenBefore) {
-          console.log("No more assets found, starting from the beginning.");
-          localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
-          // Immediately re-fetch from the beginning
-          performFetch();
-        } else {
-          setError(`No photos found matching your filters.`);
-          setIsLoading(false);
-          setIsFetching(false);
-          // This happens if the server has no assets at all. Ensure nextMedia is null.
-          if (!currentMedia) {
-            setNextMedia(null); 
-          }
+        setError(`No photos found matching your filters. Checking again from the beginning.`);
+        // This will be cleared on the next successful fetch
+        if (!currentMedia) {
+          setNextMedia(null); 
         }
+        setIsFetching(false); // Stop fetching if empty to avoid loop, UI will show error
         return;
       }
       
@@ -151,11 +142,16 @@ export function useSlideshow(immich: ImmichHook) {
     performFetch();
   }, [isFetching, fetchAssets, currentMedia]);
 
-  // Initial slideshow start when playlist is populated
+  // Initial slideshow start when playlist is populated for the first time or after a reset
   useEffect(() => {
     const startSlideshow = async () => {
-      if (playlist.length === 0 || !isLoading) return;
+      // This effect should only run to kickstart the process.
+      // It runs if we have a playlist, are not fetching, and either loading for the first time OR have no current media.
+      if (playlist.length === 0 || isFetching || (!isLoading && currentMedia)) {
+        return;
+      }
 
+      // If we are here, we have a fresh playlist and need to start the show.
       let mutablePlaylist = [...playlist];
       
       const firstAssetToLoad = mutablePlaylist.shift();
@@ -169,6 +165,7 @@ export function useSlideshow(immich: ImmichHook) {
       if (!firstMedia) {
         setError("Failed to load the first asset. Cannot start slideshow.");
         setIsLoading(false);
+        setPlaylist(mutablePlaylist); // Update playlist even on failure
         if (mutablePlaylist.length === 0 && !isFetching) {
           setIsFetching(true);
         }
@@ -184,10 +181,8 @@ export function useSlideshow(immich: ImmichHook) {
       setIsLoading(false);
     };
 
-    if (playlist.length > 0 && isLoading && !isFetching) {
-      startSlideshow();
-    }
-  }, [isLoading, isFetching, playlist, getAssetWithRetry, preloadNextAsset]);
+    startSlideshow();
+  }, [playlist, isLoading, isFetching, getAssetWithRetry, preloadNextAsset, currentMedia]);
 
 
   // Save current asset's date to local storage whenever it changes.
