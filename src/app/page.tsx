@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import type { ImmichAsset, AirPollutionData, WeatherData } from '@/lib/types';
@@ -16,6 +17,7 @@ import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
+const FETCH_TIMEOUT = 10000; // 10 seconds
 const RETRY_DELAY = 5000; // 5 seconds
 const WEATHER_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const AIR_POLLUTION_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
@@ -103,7 +105,7 @@ export default function Home() {
   // --- Asset Fetching Logic ---
   const getAssetUrl = useCallback(async (asset: ImmichAsset): Promise<string | null> => {
     if (configError) return null;
-    
+
     let url: string;
     const headers: HeadersInit = { 'x-api-key': API_KEY as string };
 
@@ -113,23 +115,40 @@ export default function Home() {
         url = `${PROXY_URL}/assets/${asset.id}/thumbnail?size=preview`;
     }
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
     try {
       const res = await fetch(url, {
         method: 'GET',
         headers: headers,
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
+
       if (!res.ok) {
         throw new Error(`Failed to fetch ${asset.type}: ${res.statusText}`);
       }
       const blob = await res.blob();
       return URL.createObjectURL(blob);
-    } catch (e: any)      {
-        console.error(`Error fetching asset ${asset.id}:`, e);
-        toast({
-            variant: "destructive",
-            title: "Asset Fetch Error",
-            description: `Could not load ${asset.type} ${asset.id}.`,
-        });
+    } catch (e: any) {
+        clearTimeout(timeoutId);
+        if (e.name === 'AbortError') {
+            console.error(`Fetch for asset ${asset.id} timed out after ${FETCH_TIMEOUT / 1000}s.`);
+            toast({
+                variant: "destructive",
+                title: "Asset Load Timeout",
+                description: `Loading ${asset.type} took too long.`,
+            });
+        } else {
+            console.error(`Error fetching asset ${asset.id}:`, e);
+            toast({
+                variant: "destructive",
+                title: "Asset Fetch Error",
+                description: `Could not load ${asset.type} ${asset.id}.`,
+            });
+        }
         return null;
     }
   }, [configError, toast]);
@@ -309,8 +328,10 @@ export default function Home() {
   // Initial asset load and starting the slideshow
   useEffect(() => {
     const startSlideshow = async () => {
-        if (!isLoading || playlist.length === 0 || currentMedia) return;
+        if (playlist.length === 0 || !isLoading) return;
 
+        setIsLoading(true);
+        
         let mutablePlaylist = [...playlist];
         
         // Load current
@@ -334,7 +355,7 @@ export default function Home() {
     if (playlist.length > 0 && isLoading) {
       startSlideshow();
     }
-  }, [isLoading, currentMedia, playlist, getAssetWithRetry, preloadNextAsset]);
+  }, [isLoading, playlist, getAssetWithRetry, preloadNextAsset]);
 
 
   // Asset rotation timer for images
@@ -527,61 +548,62 @@ export default function Home() {
     exif?.iso ? `ISO ${exif.iso}` : null,
   ].filter(Boolean).join(' • ');
 
-  const renderMedia = (media: MediaAsset | null) => {
+  const renderMedia = (media: MediaAsset | null, isCurrent: boolean) => {
     if (!media) return null;
-  
+
+    const isVisible = isCurrent && !isFading;
     const containerClasses = cn(
-      "absolute inset-0 transition-opacity duration-500",
-      isFading ? 'opacity-0' : 'opacity-100'
+        "absolute inset-0 transition-opacity duration-500",
+        isVisible ? 'opacity-100' : 'opacity-0'
     );
-  
+
     if (media.type === 'VIDEO') {
-      return (
-        <div key={media.id} className={containerClasses}>
-          <video
-            src={media.url}
-            aria-hidden="true"
-            className="absolute object-cover blur-2xl scale-110 h-full w-full"
-            autoPlay
-            muted
-            loop
-          />
-          <div className="absolute inset-0 bg-black/50"></div>
-          <video
-            ref={videoRef}
-            src={media.url}
-            onEnded={advanceToNextAsset}
-            onLoadedData={() => {
-              if (videoRef.current) {
-                setProgress(0);
-              }
-            }}
-            autoPlay
-            muted
-            className="absolute object-contain h-full w-full"
-          />
-        </div>
-      );
+        return (
+            <div key={media.id} className={containerClasses}>
+                <video
+                    src={media.url}
+                    aria-hidden="true"
+                    className="absolute object-cover blur-2xl scale-110 h-full w-full"
+                    autoPlay
+                    muted
+                    loop
+                />
+                <div className="absolute inset-0 bg-black/50"></div>
+                <video
+                    ref={isCurrent ? videoRef : null}
+                    src={media.url}
+                    onEnded={advanceToNextAsset}
+                    onLoadedData={() => {
+                        if (isCurrent && videoRef.current) {
+                            setProgress(0);
+                        }
+                    }}
+                    autoPlay={isCurrent}
+                    muted
+                    className="absolute object-contain h-full w-full"
+                />
+            </div>
+        );
     }
-  
+
     return (
-      <div key={media.id} className={containerClasses}>
-        <Image
-          src={media.url}
-          alt=""
-          aria-hidden="true"
-          fill
-          className="object-cover blur-2xl scale-110"
-        />
-        <div className="absolute inset-0 bg-black/50"></div>
-        <Image
-          src={media.url}
-          alt="Immich Photo"
-          fill
-          className="object-contain"
-          priority
-        />
-      </div>
+        <div key={media.id} className={containerClasses}>
+            <Image
+                src={media.url}
+                alt=""
+                aria-hidden="true"
+                fill
+                className="object-cover blur-2xl scale-110"
+            />
+            <div className="absolute inset-0 bg-black/50"></div>
+            <Image
+                src={media.url}
+                alt="Immich Photo"
+                fill
+                className="object-contain"
+                priority={isCurrent}
+            />
+        </div>
     );
   };
 
@@ -600,7 +622,11 @@ export default function Home() {
           </Alert>
         </div>
       )}
-      {renderMedia(currentMedia)}
+      
+      {/* Render current and next media for smooth transition */}
+      {renderMedia(currentMedia, true)}
+      {renderMedia(nextMedia, false)}
+
 
       {/* Top Left: Air Pollution */}
       {airPollution && aqiInfo && (
@@ -737,3 +763,4 @@ export default function Home() {
 }
 
     
+
