@@ -217,7 +217,6 @@ export default function Home() {
         const nextAssetInPlaylist = playlist.find(asset => asset.id === nextMedia.id);
         if (nextAssetInPlaylist && nextAssetInPlaylist.createdAt) {
             localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextAssetInPlaylist.createdAt);
-            setTakenBefore(nextAssetInPlaylist.createdAt);
         }
 
         const nextAssetIndexInPlaylist = playlist.findIndex(asset => asset.id === nextMedia.id);
@@ -254,7 +253,6 @@ export default function Home() {
              const nextAssetInPlaylist = playlist.find(asset => asset.id === newAsset.id);
             if (nextAssetInPlaylist && nextAssetInPlaylist.createdAt) {
                 localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextAssetInPlaylist.createdAt);
-                setTakenBefore(nextAssetInPlaylist.createdAt);
             }
             setCurrentMedia(newAsset);
             setAssetIndex(finalIndex);
@@ -364,8 +362,6 @@ export default function Home() {
             console.log("No more assets found, starting from the beginning.");
             localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
             setTakenBefore(null);
-            setPlaylist([]);
-            setAssetIndex(0);
             setIsFetching(true); // Trigger fetch from beginning
             return;
         }
@@ -413,6 +409,7 @@ export default function Home() {
                 // Only update if the new date is actually older than the current one
                 if (!takenBefore || new Date(newTakenBefore) < new Date(takenBefore)) {
                     setTakenBefore(newTakenBefore);
+                    localStorage.setItem(LOCAL_STORAGE_DATE_KEY, newTakenBefore);
                 }
             }
         }
@@ -442,7 +439,6 @@ export default function Home() {
                     setCurrentMedia(mediaAsset);
                     if (asset.createdAt) {
                         localStorage.setItem(LOCAL_STORAGE_DATE_KEY, asset.createdAt);
-                        setTakenBefore(asset.createdAt);
                     }
                     preloadNextAsset(1);
                 } else {
