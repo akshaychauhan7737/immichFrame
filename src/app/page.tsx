@@ -371,34 +371,9 @@ export default function Home() {
           setIsLoading(false);
           return;
         }
-
-        let filteredAssets = fetchedAssets.filter(asset => {
-            if (DISPLAY_MODE && DISPLAY_MODE !== 'all' && asset.type === 'IMAGE') {
-                const orientation = asset.exifInfo?.orientation;
-                // '1' is standard landscape. Some cameras use other values.
-                // 6 and 8 are portrait (rotated).
-                if (orientation) {
-                    if (DISPLAY_MODE === 'landscape') return ![6, 8].includes(orientation);
-                    if (DISPLAY_MODE === 'portrait') return [6, 8].includes(orientation);
-                }
-                // Fallback for assets without EXIF orientation
-                const width = asset.exifInfo?.exifImageWidth;
-                const height = asset.exifInfo?.exifImageHeight;
-                if (width && height && width > 0 && height > 0) {
-                    if (DISPLAY_MODE === 'landscape') return width > height;
-                    if (DISPLAY_MODE === 'portrait') return height > width;
-                }
-                return DISPLAY_MODE === 'landscape'; 
-            }
-            if (asset.type === 'VIDEO') {
-                const duration = parseDuration(asset.duration);
-                return duration <= MAX_VIDEO_DURATION;
-            }
-            return true;
-        });
-
-        if (filteredAssets.length > 0) {
-            const newPlaylist = [...playlist, ...filteredAssets];
+        
+        if (fetchedAssets.length > 0) {
+            const newPlaylist = [...playlist, ...fetchedAssets];
             setPlaylist(newPlaylist);
         }
         
@@ -818,4 +793,5 @@ export default function Home() {
   );
 }
 
+    
     
