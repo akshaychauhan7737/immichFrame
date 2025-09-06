@@ -23,7 +23,6 @@ const ASSET_FETCH_PAGE_SIZE = 10;
 const LOCAL_STORAGE_DATE_KEY = 'immich-view-taken-before';
 
 // --- Environment Variable-based Configuration ---
-const DISPLAY_MODE = process.env.NEXT_PUBLIC_DISPLAY_MODE; // 'portrait', 'landscape', 'all'
 const SERVER_URL_CONFIGURED = !!process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
 const API_KEY = process.env.NEXT_PUBLIC_IMMICH_API_KEY;
 const IS_FAVORITE_ONLY = process.env.NEXT_PUBLIC_IMMICH_IS_FAVORITE_ONLY === 'true';
@@ -31,25 +30,12 @@ const IS_ARCHIVED_INCLUDED = process.env.NEXT_PUBLIC_IMMICH_INCLUDE_ARCHIVED ===
 const LATITUDE = process.env.NEXT_PUBLIC_LATITUDE;
 const LONGITUDE = process.env.NEXT_PUBLIC_LONGITUDE;
 const OPENWEATHER_API_KEY = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
-const MAX_VIDEO_DURATION = parseInt(process.env.NEXT_PUBLIC_MAX_VIDEO_DURATION_SECONDS || '30', 10);
 
 // We use a local proxy to avoid CORS issues for Immich.
 const PROXY_URL = '/api/immich';
 
 // --- Helper Functions ---
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
-
-function parseDuration(duration: string): number {
-    if (!duration || typeof duration !== 'string') return 0;
-    const parts = duration.split(':');
-    if (parts.length !== 3) return 0;
-    const hours = parseInt(parts[0], 10);
-    const minutes = parseInt(parts[1], 10);
-    const seconds = parseFloat(parts[2]);
-    if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) return 0;
-    return hours * 3600 + minutes * 60 + seconds;
-}
-
 
 const getWeatherInfo = (code: number): { Icon: React.ElementType, name: string } => {
     // OpenWeatherMap Weather condition codes
@@ -86,7 +72,6 @@ export default function Home() {
   
   // --- State Management ---
   const [playlist, setPlaylist] = useState<ImmichAsset[]>([]);
-  const [assetIndex, setAssetIndex] = useState(0);
   const [takenBefore, setTakenBefore] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,9 +90,6 @@ export default function Home() {
   const configError = useMemo(() => {
     if (!SERVER_URL_CONFIGURED || !API_KEY) {
       return "Server URL or API Key is missing. Please check your environment variables.";
-    }
-    if (DISPLAY_MODE && !['portrait', 'landscape', 'all'].includes(DISPLAY_MODE)) {
-      return `Invalid value for NEXT_PUBLIC_DISPLAY_MODE. It must be one of 'portrait', 'landscape', 'all'. Found: ${DISPLAY_MODE}`;
     }
     return null;
   }, []);
@@ -176,12 +158,12 @@ export default function Home() {
       return null;
   }, [getAssetUrl, toast]);
 
-    const preloadNextAsset = useCallback(async (index: number) => {
+    const preloadNextAsset = useCallback(async (currentIndex: number) => {
         if (playlist.length === 0) return;
 
         let attempts = 0;
         let preloadedAsset: MediaAsset | null = null;
-        let nextIndex = index % playlist.length;
+        let nextIndex = (currentIndex + 1) % playlist.length;
         
         while (!preloadedAsset && attempts < playlist.length) {
             const nextAsset = playlist[nextIndex];
@@ -189,6 +171,7 @@ export default function Home() {
                 preloadedAsset = await getAssetWithRetry(nextAsset);
             }
             if (!preloadedAsset) {
+                // If an asset fails to preload, skip it and try the next one
                 attempts++;
                 nextIndex = (nextIndex + 1) % playlist.length;
             }
@@ -199,7 +182,13 @@ export default function Home() {
     }, [playlist, getAssetWithRetry]);
 
   const advanceToNextAsset = useCallback(async () => {
-    if (playlist.length === 0) return;
+    if (playlist.length === 0 || !nextMedia) {
+      // If there's nothing to advance to, try fetching more assets.
+      if (!isFetching) {
+        setIsFetching(true);
+      }
+      return;
+    }
 
     setIsFading(true);
     await delay(500); // Wait for fade-out
@@ -208,65 +197,24 @@ export default function Home() {
         URL.revokeObjectURL(currentMedia.url);
     }
     
-    const currentIndex = playlist.findIndex(a => a.id === currentMedia?.id);
-    if (currentIndex >= 0 && currentIndex > playlist.length - 5 && !isFetching) {
-        setIsFetching(true); // Trigger fetch
+    // The next media is already preloaded, so we can just use it.
+    const newCurrentMedia = nextMedia;
+    setCurrentMedia(newCurrentMedia);
+    setNextMedia(null); // Clear preloaded
+
+    const nextAssetInPlaylist = playlist.find(asset => asset.id === newCurrentMedia.id);
+    if (nextAssetInPlaylist && nextAssetInPlaylist.createdAt) {
+        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextAssetInPlaylist.createdAt);
     }
-    
-    if (nextMedia) {
-        const nextAssetInPlaylist = playlist.find(asset => asset.id === nextMedia.id);
-        if (nextAssetInPlaylist && nextAssetInPlaylist.createdAt) {
-            localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextAssetInPlaylist.createdAt);
-        }
 
-        const nextAssetIndexInPlaylist = playlist.findIndex(asset => asset.id === nextMedia.id);
-        const newIndex = nextAssetIndexInPlaylist >= 0 ? nextAssetIndexInPlaylist : (assetIndex + 1) % playlist.length;
-
-        setCurrentMedia(nextMedia);
-        setAssetIndex(newIndex);
-        setNextMedia(null); // Clear preloaded
-        preloadNextAsset(newIndex + 1); // Preload the *next* next one
-    } else {
-        // Fallback: if preloading failed or hasn't happened, load next one on the fly
-        const nextIndex = (assetIndex + 1) % playlist.length;
-        
-        let newAsset: MediaAsset | null = null;
-        let attempts = 0;
-        let finalIndex = nextIndex;
-
-        while(!newAsset && attempts < playlist.length) {
-            const potentialNextIndex = (nextIndex + attempts) % playlist.length;
-            const nextAsset = playlist[potentialNextIndex];
-
-            if (nextAsset) {
-                newAsset = await getAssetWithRetry(nextAsset);
-            }
-
-            if (!newAsset) {
-                attempts++;
-            } else {
-                finalIndex = potentialNextIndex;
-            }
-        }
-        
-        if (newAsset) {
-             const nextAssetInPlaylist = playlist.find(asset => asset.id === newAsset.id);
-            if (nextAssetInPlaylist && nextAssetInPlaylist.createdAt) {
-                localStorage.setItem(LOCAL_STORAGE_DATE_KEY, nextAssetInPlaylist.createdAt);
-            }
-            setCurrentMedia(newAsset);
-            setAssetIndex(finalIndex);
-            preloadNextAsset(finalIndex + 1);
-        } else {
-            setError("Failed to load any assets from the playlist.");
-            await delay(RETRY_DELAY);
-            setIsFetching(true); // Try fetching new data
-        }
+    const newIndex = playlist.findIndex(asset => asset.id === newCurrentMedia.id);
+    if (newIndex >= 0) {
+      preloadNextAsset(newIndex);
     }
     
     setIsFading(false);
 
-}, [assetIndex, playlist, getAssetWithRetry, currentMedia, isFetching, nextMedia, preloadNextAsset]);
+}, [playlist, currentMedia, nextMedia, preloadNextAsset, isFetching]);
 
 
   // --- Effects ---
@@ -280,12 +228,26 @@ export default function Home() {
     setIsFetching(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  
+  // Logic to fetch more assets when the playlist is running low
+  useEffect(() => {
+    if (isFetching || !currentMedia || playlist.length === 0) {
+      return;
+    }
+
+    const currentIndex = playlist.findIndex(a => a.id === currentMedia.id);
+    
+    // If we are near the end of the playlist, fetch more assets
+    if (currentIndex >= 0 && playlist.length - currentIndex < 5) {
+      setIsFetching(true);
+    }
+  }, [currentMedia, playlist, isFetching]);
+
 
   const handleDateReset = useCallback(() => {
     localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
     setTakenBefore(null);
     setPlaylist([]);
-    setAssetIndex(0);
     setCurrentMedia(null);
     setNextMedia(null);
     setIsFetching(true); // Trigger a re-fetch from the beginning
@@ -301,7 +263,6 @@ export default function Home() {
         localStorage.setItem(LOCAL_STORAGE_DATE_KEY, newDate);
         setTakenBefore(newDate);
         setPlaylist([]);
-        setAssetIndex(0);
         setCurrentMedia(null);
         setNextMedia(null);
         setIsFetching(true); // Trigger a re-fetch from the selected date
@@ -362,7 +323,8 @@ export default function Home() {
             console.log("No more assets found, starting from the beginning.");
             localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
             setTakenBefore(null);
-            setIsFetching(true); // Trigger fetch from beginning
+            // Setting isFetching here will trigger a re-fetch in this same useEffect
+            setIsFetching(true); 
             return;
         }
 
@@ -373,24 +335,16 @@ export default function Home() {
         }
         
         if (fetchedAssets.length > 0) {
-            const newPlaylist = [...playlist, ...fetchedAssets];
+            const existingIds = new Set(playlist.map(a => a.id));
+            const uniqueNewAssets = fetchedAssets.filter(a => !existingIds.has(a.id));
+            const newPlaylist = [...playlist, ...uniqueNewAssets];
             setPlaylist(newPlaylist);
-        }
-        
-        if (fetchedAssets.length > 0) {
-            const lastAsset = fetchedAssets[fetchedAssets.length - 1];
-            if (lastAsset && lastAsset.createdAt) {
-                const newTakenBefore = lastAsset.createdAt;
-                // Only update if the new date is actually older than the current one
-                if (!takenBefore || new Date(newTakenBefore) < new Date(takenBefore)) {
-                    setTakenBefore(newTakenBefore);
-                    localStorage.setItem(LOCAL_STORAGE_DATE_KEY, newTakenBefore);
-                }
-            }
         }
         
       } catch (e: any) {
           setError(`Failed to connect to Immich server: ${e.message}`);
+          await delay(RETRY_DELAY);
+          setIsFetching(true); // Retry after a delay
       } finally {
           setIsLoading(false);
           setIsFetching(false);
@@ -415,17 +369,28 @@ export default function Home() {
                     if (asset.createdAt) {
                         localStorage.setItem(LOCAL_STORAGE_DATE_KEY, asset.createdAt);
                     }
-                    preloadNextAsset(1);
+                    preloadNextAsset(0);
                 } else {
-                    // If first asset fails, advance to the next one
+                    // If first asset fails, try to advance to the next one
                     await delay(RETRY_DELAY);
-                    advanceToNextAsset();
+                    // Manually trigger advance logic if preloading fails
+                     const nextIndex = 1 % playlist.length;
+                      let newAsset: MediaAsset | null = null;
+                      if(playlist[nextIndex]) {
+                        newAsset = await getAssetWithRetry(playlist[nextIndex]);
+                      }
+                      if(newAsset) {
+                        setCurrentMedia(newAsset);
+                        preloadNextAsset(nextIndex);
+                      } else {
+                        setError("Failed to load initial assets.");
+                      }
                 }
             }
         };
         loadInitialAsset();
     }
-  }, [isLoading, currentMedia, playlist, getAssetWithRetry, advanceToNextAsset, preloadNextAsset]);
+  }, [isLoading, currentMedia, playlist, getAssetWithRetry, preloadNextAsset]);
 
 
   // Asset rotation timer for images
@@ -592,60 +557,65 @@ export default function Home() {
 
   const renderMedia = (media: MediaAsset | null) => {
     if (!media) return null;
-
-    if (media.type === 'VIDEO') {
-        return (
-            <div key={media.id} className={cn("absolute inset-0 transition-opacity duration-500", isFading ? 'opacity-0' : 'opacity-100')}>
-                <video
-                    key={`${media.id}-bg`}
-                    src={media.url}
-                    aria-hidden="true"
-                    className="absolute object-cover blur-2xl scale-110 h-full w-full"
-                    autoPlay
-                    muted
-                    loop
-                />
-                <div className="absolute inset-0 bg-black/50"></div>
-                <video
-                    ref={videoRef}
-                    key={media.id}
-                    src={media.url}
-                    onEnded={advanceToNextAsset}
-                    onLoadedData={() => {
-                        if (videoRef.current) {
-                           setProgress(0);
-                        }
-                    }}
-                    autoPlay
-                    muted
-                    className="absolute object-contain h-full w-full"
-                />
-            </div>
-        );
-    }
-    
-    return (
-        <div key={media.id} className={cn("absolute inset-0 transition-opacity duration-500", isFading ? 'opacity-0' : 'opacity-100')}>
-            <Image
-                key={`${media.id}-bg`}
-                src={media.url}
-                alt=""
-                aria-hidden="true"
-                fill
-                className="object-cover blur-2xl scale-110"
-            />
-            <div className="absolute inset-0 bg-black/50"></div>
-            <Image
-                key={media.id}
-                src={media.url}
-                alt="Immich Photo"
-                fill
-                className="object-contain"
-                priority
-            />
-        </div>
+  
+    const containerClasses = cn(
+      "absolute inset-0 transition-opacity duration-500",
+      isFading ? 'opacity-0' : 'opacity-100'
     );
-  }
+  
+    if (media.type === 'VIDEO') {
+      return (
+        <div key={media.id} className={containerClasses}>
+          <video
+            key={`${media.id}-bg`}
+            src={media.url}
+            aria-hidden="true"
+            className="absolute object-cover blur-2xl scale-110 h-full w-full"
+            autoPlay
+            muted
+            loop
+          />
+          <div className="absolute inset-0 bg-black/50"></div>
+          <video
+            ref={videoRef}
+            key={media.id}
+            src={media.url}
+            onEnded={advanceToNextAsset}
+            onLoadedData={() => {
+              if (videoRef.current) {
+                setProgress(0);
+              }
+            }}
+            autoPlay
+            muted
+            className="absolute object-contain h-full w-full"
+          />
+        </div>
+      );
+    }
+  
+    return (
+      <div key={media.id} className={containerClasses}>
+        <Image
+          key={`${media.id}-bg`}
+          src={media.url}
+          alt=""
+          aria-hidden="true"
+          fill
+          className="object-cover blur-2xl scale-110"
+        />
+        <div className="absolute inset-0 bg-black/50"></div>
+        <Image
+          key={media.id}
+          src={media.url}
+          alt="Immich Photo"
+          fill
+          className="object-contain"
+          priority
+        />
+      </div>
+    );
+  };
 
 
   return (
@@ -658,24 +628,23 @@ export default function Home() {
         <div className="pointer-events-none absolute top-4 left-4 text-white">
             <div className="relative space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm text-left">
                 <div className="flex items-center gap-3">
-                    <Wind size={32} />
+                    <Wind size={24} />
                     <div className='flex items-baseline gap-2'>
-                        <span className="text-4xl font-bold">{airPollution.main.aqi}</span>
-                        <span className={cn("text-2xl font-medium", aqiInfo.color)}>{aqiInfo.label}</span>
+                        <span className="text-3xl font-bold">{airPollution.main.aqi}</span>
+                        <span className={cn("text-xl font-medium", aqiInfo.color)}>{aqiInfo.label}</span>
                     </div>
                 </div>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-sm text-white/80 pt-1">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-white/80 pt-1">
                     <span>PM2.5: {airPollution.components.pm2_5.toFixed(1)}</span>
                     <span>NO₂: {airPollution.components.no2.toFixed(1)}</span>
                     <span>PM10: {airPollution.components.pm10.toFixed(1)}</span>
                     <span>SO₂: {airPollution.components.so2.toFixed(1)}</span>
                 </div>
-
                 <div className="absolute bottom-1 right-1">
                     <Popover>
                         <PopoverTrigger asChild>
-                            <Button variant="ghost" size="icon" className='pointer-events-auto h-8 w-8 text-white/50 hover:text-white hover:bg-black/30 backdrop-blur-sm'>
-                            <Settings className="h-4 w-4" />
+                            <Button variant="ghost" size="icon" className='pointer-events-auto h-6 w-6 text-white/50 hover:text-white hover:bg-black/30 backdrop-blur-sm'>
+                            <Settings className="h-3 w-3" />
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto">
@@ -709,24 +678,24 @@ export default function Home() {
           <div className="pointer-events-none absolute top-4 right-4 text-white">
               <div className="space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm text-right">
                   <div className="flex items-center justify-end gap-2">
-                      <span className="text-5xl font-bold">{weather.temperature}°</span>
-                      <weatherInfo.Icon size={48} className="shrink-0" />
+                      <span className="text-4xl font-bold">{weather.temperature}°</span>
+                      <weatherInfo.Icon size={36} className="shrink-0" />
                   </div>
-                  <div className="text-base font-medium text-white/90 capitalize">
+                  <div className="text-sm font-medium text-white/90 capitalize">
                       {weather.description}
                   </div>
-                   <div className="flex flex-col items-end text-sm text-white/80 pt-1">
+                   <div className="flex flex-col items-end text-xs text-white/80 pt-1">
                       <div className="flex items-center gap-1.5">
-                          <Thermometer size={16} />
+                          <Thermometer size={14} />
                           <span>Feels like {weather.feelsLike}°</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="flex items-center gap-1.5">
-                            <Wind size={16} />
+                            <Wind size={14} />
                             <span>{weather.windSpeed} km/h</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                            <Droplets size={16} />
+                            <Droplets size={14} />
                             <span>{weather.humidity}%</span>
                         </div>
                       </div>
@@ -738,11 +707,11 @@ export default function Home() {
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-4 md:p-6 text-white">
         {/* Left Box: Time and Progress */}
         <div className="flex items-end gap-4">
-            <div className="w-[200px] space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm">
-                <div className="text-4xl font-semibold">
+            <div className="w-[160px] space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm">
+                <div className="text-3xl font-semibold">
                     {currentTime}
                 </div>
-                <div className="text-xl font-medium text-white/90">
+                <div className="text-base font-medium text-white/90">
                     {currentDate}
                 </div>
                 <div className="w-full pt-2">
@@ -793,5 +762,4 @@ export default function Home() {
   );
 }
 
-    
     
