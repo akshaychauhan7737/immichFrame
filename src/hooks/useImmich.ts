@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useMemo, useState } from 'react';
@@ -25,11 +26,13 @@ export function useImmich() {
         return null;
     }, []);
 
-    const fetchAssets = useCallback(async (takenBefore: string | null): Promise<ImmichAsset[] | null> => {
+    const fetchAssets = useCallback(async (initialTakenBefore: string | null): Promise<ImmichAsset[] | null> => {
         if (configError) {
             console.error("fetchAssets aborted due to config error:", configError);
             return null;
         }
+
+        const takenBefore = initialTakenBefore || localStorage.getItem('immich-view-taken-before');
 
         try {
             const requestBody: any = {
@@ -60,7 +63,16 @@ export function useImmich() {
             }
             
             const data = await response.json();
-            return data.assets.items || [];
+            const items = data.assets.items || [];
+
+            if (items.length === 0 && takenBefore) {
+                console.log("Reached end of timeline, looping back to the beginning.");
+                localStorage.removeItem('immich-view-taken-before');
+                // Immediately re-fetch from the start.
+                return fetchAssets(null);
+            }
+
+            return items;
         } catch (e: any) {
             console.error(`Failed to fetch assets from Immich:`, e);
             return null; // Return null on failure
@@ -76,7 +88,9 @@ export function useImmich() {
                 ? `${API_BASE_URL}/assets/${asset.id}/original` 
                 : `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview`;
         } else { // IMAGE
-            url = `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview`;
+             url = type === 'original'
+                ? `${API_BASE_URL}/assets/${asset.id}/original` 
+                : `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview`;
         }
 
         const controller = new AbortController();
@@ -109,15 +123,10 @@ export function useImmich() {
         let originalUrl: string | null = null;
         let previewUrl: string | null = null;
         
-        if (asset.type === 'VIDEO') {
-            [originalUrl, previewUrl] = await Promise.all([
-                getAssetUrl(asset, 'original'),
-                getAssetUrl(asset, 'preview')
-            ]);
-        } else {
-            previewUrl = await getAssetUrl(asset, 'preview');
-            originalUrl = previewUrl; // For images, original and preview are the same
-        }
+        [originalUrl, previewUrl] = await Promise.all([
+            getAssetUrl(asset, 'original'),
+            getAssetUrl(asset, 'preview')
+        ]);
 
         if (originalUrl && previewUrl) {
              return {

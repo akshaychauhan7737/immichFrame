@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { MediaAsset } from '@/lib/types';
@@ -51,7 +52,7 @@ export function MediaRenderer({ media, isVisible, isCurrent, videoRef, onVideoEn
     <div className={containerClasses}>
       {/* Blurred Background */}
       <Image
-        src={media.url}
+        src={media.previewUrl}
         alt=""
         aria-hidden="true"
         fill
