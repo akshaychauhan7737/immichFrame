@@ -87,6 +87,7 @@ export default function Home() {
   const [nextMedia, setNextMedia] = useState<MediaAsset | null>(null);
   const [isFading, setIsFading] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
+  const [urlsToRevoke, setUrlsToRevoke] = useState<string[]>([]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -229,8 +230,7 @@ export default function Home() {
     setIsFading(true);
     await delay(500); // Wait for fade-out
   
-    const oldMediaUrl = currentMedia?.url;
-    const oldPreviewUrl = currentMedia?.previewUrl;
+    const oldMedia = currentMedia;
   
     // Promote next to current
     setCurrentMedia(nextMedia);
@@ -239,12 +239,18 @@ export default function Home() {
     const updatedPlaylist = await preloadNextAsset(playlist);
     setPlaylist(updatedPlaylist);
   
-    // Revoke the old URLs after the transition
-    if (oldMediaUrl && oldMediaUrl !== oldPreviewUrl) {
-      URL.revokeObjectURL(oldMediaUrl);
-    }
-    if (oldPreviewUrl) {
-       URL.revokeObjectURL(oldPreviewUrl);
+    // Queue old URLs for revocation
+    if (oldMedia) {
+        const urlsToQueue = [];
+        if (oldMedia.url && oldMedia.url !== oldMedia.previewUrl) {
+            urlsToQueue.push(oldMedia.url);
+        }
+        if (oldMedia.previewUrl) {
+            urlsToQueue.push(oldMedia.previewUrl);
+        }
+        if (urlsToQueue.length > 0) {
+            setUrlsToRevoke(prev => [...prev, ...urlsToQueue]);
+        }
     }
   
     setIsFading(false);
@@ -252,6 +258,21 @@ export default function Home() {
 
 
   // --- Effects ---
+
+  // Effect to safely revoke old blob URLs after a delay
+  useEffect(() => {
+    if (urlsToRevoke.length === 0) return;
+
+    const timer = setTimeout(() => {
+        urlsToRevoke.forEach(url => {
+            console.log("Revoking blob URL:", url);
+            URL.revokeObjectURL(url);
+        });
+        setUrlsToRevoke([]); // Clear the queue
+    }, 2000); // 2-second delay to ensure transition is complete
+
+    return () => clearTimeout(timer);
+  }, [urlsToRevoke]);
   
   // Load date from localStorage on mount and trigger initial fetch
   useEffect(() => {
@@ -798,3 +819,4 @@ export default function Home() {
     </main>
   );
 }
+
