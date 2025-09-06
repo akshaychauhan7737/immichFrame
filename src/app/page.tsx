@@ -17,7 +17,7 @@ const RETRY_DELAY = 5000; // 5 seconds
 const WEATHER_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const AIR_POLLUTION_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes
 const ASSET_FETCH_PAGE_SIZE = 50;
-const LOCAL_STORAGE_PAGE_KEY = 'immich-view-fetch-page';
+const LOCAL_STORAGE_DATE_KEY = 'immich-view-taken-before';
 
 // --- Environment Variable-based Configuration ---
 const DISPLAY_MODE = process.env.NEXT_PUBLIC_DISPLAY_MODE; // 'portrait', 'landscape', or 'all'
@@ -90,7 +90,7 @@ export default function Home() {
   // --- State Management ---
   const [playlist, setPlaylist] = useState<ImmichAsset[]>([]);
   const [assetIndex, setAssetIndex] = useState(0);
-  const [fetchPage, setFetchPage] = useState(1);
+  const [takenBefore, setTakenBefore] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState('');
@@ -100,6 +100,7 @@ export default function Home() {
   const [airPollution, setAirPollution] = useState<AirPollutionData | null>(null);
   const [currentMedia, setCurrentMedia] = useState<MediaAsset | null>(null);
   const [isFading, setIsFading] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -183,8 +184,8 @@ export default function Home() {
     }
     
     // If we're near the end of the current playlist, start fetching the next page.
-    if (playlist.length > 0 && assetIndex >= playlist.length - 5 && (playlist.length % ASSET_FETCH_PAGE_SIZE === 0)) {
-        setFetchPage(p => p + 1);
+    if (playlist.length > 0 && assetIndex >= playlist.length - 5) {
+        setIsFetching(true); // Trigger fetch
     }
     
     const nextIndex = (assetIndex + 1) % playlist.length;
@@ -224,22 +225,22 @@ export default function Home() {
 
   // --- Effects ---
 
-  // Load page from localStorage on mount
+  // Load date from localStorage on mount
   useEffect(() => {
-    const savedPage = localStorage.getItem(LOCAL_STORAGE_PAGE_KEY);
-    if (savedPage) {
-        setFetchPage(parseInt(savedPage, 10));
+    const savedDate = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
+    if (savedDate) {
+        setTakenBefore(savedDate);
     }
   }, []);
 
-  // Save page to localStorage
+  // Save date to localStorage
   useEffect(() => {
-    if (fetchPage > 1) { // Don't save initial value
-      localStorage.setItem(LOCAL_STORAGE_PAGE_KEY, fetchPage.toString());
+    if (takenBefore) {
+      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, takenBefore);
     } else {
-      localStorage.removeItem(LOCAL_STORAGE_PAGE_KEY);
+      localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
     }
-  }, [fetchPage]);
+  }, [takenBefore]);
 
 
   // Main logic to fetch assets from search endpoint
@@ -251,10 +252,22 @@ export default function Home() {
     }
 
     const fetchAssets = async () => {
-      if(fetchPage === 1 && playlist.length === 0) setIsLoading(true);
+      if (playlist.length === 0) setIsLoading(true);
       setError(null);
       
       try {
+        const requestBody: any = {
+              isFavorite: IS_FAVORITE_ONLY,
+              isArchived: IS_ARCHIVED_INCLUDED ? undefined : false,
+              size: ASSET_FETCH_PAGE_SIZE,
+              withExif: true,
+              sort: 'DESC',
+        };
+
+        if (takenBefore) {
+            requestBody.takenBefore = takenBefore;
+        }
+
         const response = await fetch(`${PROXY_URL}/search/metadata`, {
           method: 'POST',
           headers: { 
@@ -262,14 +275,7 @@ export default function Home() {
             'Content-Type': 'application/json',
             'Accept': 'application/json' 
           },
-          body: JSON.stringify({
-              isFavorite: IS_FAVORITE_ONLY,
-              isArchived: IS_ARCHIVED_INCLUDED ? undefined : false,
-              page: fetchPage,
-              size: ASSET_FETCH_PAGE_SIZE,
-              withExif: true,
-              sort: 'DESC',
-          })
+          body: JSON.stringify(requestBody)
         });
 
         if (!response.ok) {
@@ -280,12 +286,10 @@ export default function Home() {
         const data = await response.json();
         const fetchedAssets: ImmichAsset[] = data.assets.items || [];
         
-        // If we fetched a page > 1 and got no assets, loop back to page 1
-        if (fetchedAssets.length === 0 && fetchPage > 1) {
-            setFetchPage(1); // This will trigger a re-fetch for page 1
-            setPlaylist([]); // Clear the old playlist
+        if (fetchedAssets.length === 0 && takenBefore) {
+            setTakenBefore(null); // This will trigger a re-fetch for the latest photos
+            setPlaylist([]);
             setAssetIndex(0);
-            localStorage.removeItem(LOCAL_STORAGE_PAGE_KEY);
             return;
         }
 
@@ -318,26 +322,35 @@ export default function Home() {
             return true;
         });
 
-        const newPlaylist = fetchPage === 1 
-            ? shuffleArray(filteredAssets) 
-            : [...playlist, ...shuffleArray(filteredAssets)];
-
-        if (playlist.length === 0 && newPlaylist.length > 0) {
-             setPlaylist(newPlaylist);
-         } else {
+        if (filteredAssets.length > 0) {
+            const lastAsset = filteredAssets[filteredAssets.length - 1];
+            setTakenBefore(lastAsset.createdAt);
+            
+            const newPlaylist = [...playlist, ...shuffleArray(filteredAssets)];
             setPlaylist(newPlaylist);
-         }
+        } else {
+            // If filtering results in no assets, fetch next batch
+            if (fetchedAssets.length > 0) {
+                const lastAsset = fetchedAssets[fetchedAssets.length - 1];
+                setTakenBefore(lastAsset.createdAt);
+            } else {
+                 setTakenBefore(null); // Loop back
+            }
+        }
         
       } catch (e: any) {
           setError(`Failed to connect to Immich server: ${e.message}`);
       } finally {
           setIsLoading(false);
+          setIsFetching(false);
       }
     };
 
-    fetchAssets();
+    if (isFetching || (isLoading && playlist.length === 0)) {
+      fetchAssets();
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configError, fetchPage]);
+  }, [configError, isFetching, isLoading]);
 
   // Initial asset load
   useEffect(() => {
@@ -468,7 +481,7 @@ export default function Home() {
   
   // --- Render Logic ---
 
-  if (isLoading) {
+  if (isLoading && playlist.length === 0) {
     return (
       <div className="flex h-screen w-screen flex-col items-center justify-center bg-background text-foreground">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
