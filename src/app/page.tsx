@@ -6,10 +6,13 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Image from 'next/image';
 import { Progress } from "@/components/ui/progress";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Loader2, AlertTriangle, MapPin, Calendar, Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind, Droplets, Thermometer, Camera, Aperture } from 'lucide-react';
+import { Loader2, AlertTriangle, MapPin, Calendar, Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind, Droplets, Thermometer, Camera, Aperture, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
@@ -245,11 +248,35 @@ export default function Home() {
     if (takenBefore) {
       localStorage.setItem(LOCAL_STORAGE_DATE_KEY, takenBefore);
     } else {
-      // Don't remove it, as that causes a loop on startup. 
-      // Set to empty string or handle null case gracefully.
       localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
     }
   }, [takenBefore]);
+
+  const handleDateReset = useCallback(() => {
+    setTakenBefore(null);
+    setPlaylist([]);
+    setAssetIndex(0);
+    setCurrentMedia(null);
+    setIsFetching(true); // Trigger a re-fetch from the beginning
+    toast({
+        title: "Timeline Reset",
+        description: "Slideshow will restart from the most recent photos.",
+    });
+  }, [toast]);
+
+  const handleDateSelect = useCallback((date: Date | undefined) => {
+    if (date) {
+        setTakenBefore(date.toISOString());
+        setPlaylist([]);
+        setAssetIndex(0);
+        setCurrentMedia(null);
+        setIsFetching(true); // Trigger a re-fetch from the selected date
+        toast({
+            title: "Timeline Set",
+            description: `Searching for photos taken before ${format(date, 'PPP')}.`,
+        });
+    }
+  }, [toast]);
 
 
   // Main logic to fetch assets from search endpoint
@@ -676,18 +703,48 @@ export default function Home() {
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-4 md:p-6 text-white">
         {/* Left Box: Time and Progress */}
-        <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-sm">
-          <div className="text-5xl font-semibold md:text-7xl">
-            {currentTime}
-          </div>
-          <div className="text-2xl md:text-3xl font-medium text-white/90">
-            {currentDate}
-          </div>
+        <div className="flex items-end gap-4">
+            <div className="space-y-2 rounded-lg bg-black/30 p-4 backdrop-blur-sm">
+                <div className="text-5xl font-semibold md:text-7xl">
+                    {currentTime}
+                </div>
+                <div className="text-2xl md:text-3xl font-medium text-white/90">
+                    {currentDate}
+                </div>
 
-          <div className="w-full pt-2">
-            <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white" />
-          </div>
+                <div className="w-full pt-2">
+                    <Progress value={progress} className="h-1 bg-white/20 [&>div]:bg-white" />
+                </div>
+            </div>
+             <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className='h-10 w-10 text-white/50 hover:text-white hover:bg-black/30 backdrop-blur-sm'>
+                    <Settings className="h-6 w-6" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto">
+                    <div className="grid gap-4">
+                        <div className="space-y-2">
+                            <h4 className="font-medium leading-none">Timeline Settings</h4>
+                            <p className="text-sm text-muted-foreground">
+                                Control which photos are displayed.
+                            </p>
+                        </div>
+                        <div className='flex flex-col items-center gap-2'>
+                           <CalendarPicker
+                                mode="single"
+                                onSelect={handleDateSelect}
+                                initialFocus
+                            />
+                           <Button variant="outline" onClick={handleDateReset} className='w-full'>
+                                Reset to Latest
+                           </Button>
+                        </div>
+                    </div>
+                </PopoverContent>
+            </Popover>
         </div>
+
 
         {/* Right Box: Photo Details */}
         {(isDateValid || location || camera || exif?.lensModel) && (
@@ -729,3 +786,4 @@ export default function Home() {
     </main>
   );
 }
+
