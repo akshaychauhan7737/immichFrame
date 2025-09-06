@@ -180,15 +180,16 @@ export default function Home() {
 
         let attempts = 0;
         let preloadedAsset: MediaAsset | null = null;
+        let nextIndex = index % playlist.length;
         
         while (!preloadedAsset && attempts < playlist.length) {
-            const nextIndex = (index + 1 + attempts) % playlist.length;
             const nextAsset = playlist[nextIndex];
             if (nextAsset) {
                 preloadedAsset = await getAssetWithRetry(nextAsset);
             }
             if (!preloadedAsset) {
                 attempts++;
+                nextIndex = (nextIndex + 1) % playlist.length;
             }
         }
         
@@ -212,23 +213,24 @@ export default function Home() {
     }
     
     if (nextMedia) {
-        const nextIndex = playlist.findIndex(asset => asset.id === nextMedia.id);
+        const nextAssetIndex = playlist.findIndex(asset => asset.id === nextMedia.id);
+        const newIndex = nextAssetIndex >= 0 ? nextAssetIndex : (assetIndex + 1) % playlist.length;
+
         setCurrentMedia(nextMedia);
-        setAssetIndex(nextIndex >= 0 ? nextIndex : (assetIndex + 1) % playlist.length);
+        setAssetIndex(newIndex);
         setNextMedia(null); // Clear preloaded
-        preloadNextAsset(nextIndex >= 0 ? nextIndex : (assetIndex + 1) % playlist.length); // Preload the *next* next one
+        preloadNextAsset(newIndex + 1); // Preload the *next* next one
     } else {
         // Fallback: if preloading failed or hasn't happened, load next one on the fly
         const nextIndex = (assetIndex + 1) % playlist.length;
-        setAssetIndex(nextIndex);
         
-        let nextAsset = playlist[nextIndex];
         let newAsset: MediaAsset | null = null;
         let attempts = 0;
+        let finalIndex = nextIndex;
 
         while(!newAsset && attempts < playlist.length) {
             const potentialNextIndex = (nextIndex + attempts) % playlist.length;
-            nextAsset = playlist[potentialNextIndex];
+            const nextAsset = playlist[potentialNextIndex];
 
             if (nextAsset) {
                 newAsset = await getAssetWithRetry(nextAsset);
@@ -236,13 +238,15 @@ export default function Home() {
 
             if (!newAsset) {
                 attempts++;
+            } else {
+                finalIndex = potentialNextIndex;
             }
         }
         
         if (newAsset) {
             setCurrentMedia(newAsset);
-            setAssetIndex((nextIndex + attempts) % playlist.length);
-            preloadNextAsset((nextIndex + attempts) % playlist.length);
+            setAssetIndex(finalIndex);
+            preloadNextAsset(finalIndex + 1);
         } else {
             setError("Failed to load any assets from the playlist.");
         }
@@ -394,7 +398,7 @@ export default function Home() {
         if (fetchedAssets.length > 0) {
             const lastAsset = fetchedAssets[fetchedAssets.length - 1];
             // The API returns fileCreatedAt which is more reliable for photos from various sources.
-            setTakenBefore(lastAsset.fileCreatedAt); 
+            setTakenBefore(lastAsset.createdAt); 
         } else if (takenBefore) {
              // If we got nothing and we had a 'takenBefore' date, it means we're at the end. Loop back.
              setTakenBefore(null);
@@ -409,7 +413,7 @@ export default function Home() {
     };
     
     // This condition triggers the fetch
-    if (isFetching || (isLoading && playlist.length === 0)) {
+    if (!configError && (isFetching || (isLoading && playlist.length === 0))) {
         fetchAssets();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -424,7 +428,7 @@ export default function Home() {
                 const mediaAsset = await getAssetWithRetry(asset);
                 if (mediaAsset) {
                     setCurrentMedia(mediaAsset);
-                    preloadNextAsset(0); // Preload the next one
+                    preloadNextAsset(1); // Preload the next one
                 } else {
                     // If first asset fails, try to advance
                     advanceToNextAsset();
@@ -805,5 +809,7 @@ export default function Home() {
     </main>
   );
 }
+
+    
 
     
