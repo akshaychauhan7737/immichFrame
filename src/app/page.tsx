@@ -350,7 +350,7 @@ export default function Home() {
       fetchAssets();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configError, isFetching, isLoading]);
+  }, [configError, isFetching, isLoading, takenBefore]);
 
   // Initial asset load
   useEffect(() => {
@@ -713,3 +713,5 @@ export default function Home() {
     </main>
   );
 }
+
+    
