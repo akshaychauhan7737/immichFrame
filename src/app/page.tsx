@@ -114,9 +114,8 @@ export default function Home() {
   }, []);
   
   const currentAsset = useMemo(() => {
-    if (!currentMedia) return null;
-    return playlist.find(p => p.id === currentMedia.id);
-  }, [playlist, currentMedia]);
+    return playlist[assetIndex];
+  }, [playlist, assetIndex]);
 
   // --- Asset Fetching Logic ---
   const getAssetUrl = useCallback(async (asset: ImmichAsset): Promise<string | null> => {
@@ -175,64 +174,52 @@ export default function Home() {
 
   const advanceToNextAsset = useCallback(async () => {
     if (playlist.length === 0) return;
-  
+
     setIsFading(true);
     await delay(500); // Wait for fade-out
-  
+
     if (currentMedia?.url) {
-      URL.revokeObjectURL(currentMedia.url);
+        URL.revokeObjectURL(currentMedia.url);
     }
     
-    let nextIndex = assetIndex;
-    if (playlist.length > 1) {
-      // Pick a random index, but not the same as the current one
-      do {
-        nextIndex = Math.floor(Math.random() * playlist.length);
-      } while (nextIndex === assetIndex);
-    } else {
-      nextIndex = 0;
+    // If we're near the end of the current playlist, start fetching the next page.
+    if (playlist.length > 0 && assetIndex >= playlist.length - 5 && (playlist.length % ASSET_FETCH_PAGE_SIZE === 0)) {
+        setFetchPage(p => p + 1);
     }
     
-    // If we're near the end of the *original* playlist order, start fetching the next page.
-    // This uses the index of the current asset in the playlist.
-    const currentIndexInPlaylist = playlist.findIndex(p => p.id === currentMedia?.id);
-    if (playlist.length > 0 && playlist.length - currentIndexInPlaylist < 5 && (playlist.length % ASSET_FETCH_PAGE_SIZE === 0)) {
-      setFetchPage(p => p + 1);
-    }
+    const nextIndex = (assetIndex + 1) % playlist.length;
     
     let nextAsset = playlist[nextIndex];
     let newUrl = null;
-  
-    // Loop to find a loadable asset
     let attempts = 0;
+
+    // Loop to find a loadable asset
     while(!newUrl && attempts < playlist.length) {
-      nextAsset = playlist[nextIndex];
-      if (nextAsset) {
-        newUrl = await getAssetWithRetry(nextAsset);
-      }
-      if (!newUrl) {
-        // If loading fails, pick another random asset
-        do {
-          nextIndex = Math.floor(Math.random() * playlist.length);
-        } while (nextIndex === assetIndex);
-        attempts++;
-      }
+        nextAsset = playlist[nextIndex];
+        if (nextAsset) {
+            newUrl = await getAssetWithRetry(nextAsset);
+        }
+        if (!newUrl) {
+            // If loading fails, skip to the next asset in the playlist
+            setAssetIndex(currentIndex => (currentIndex + 1) % playlist.length);
+            attempts++;
+        }
     }
     
     if (newUrl && nextAsset) {
-      setCurrentMedia({ 
-          url: newUrl, 
-          id: nextAsset.id, 
-          type: nextAsset.type as 'IMAGE' | 'VIDEO',
-      });
-      setAssetIndex(nextIndex);
+        setCurrentMedia({ 
+            url: newUrl, 
+            id: nextAsset.id, 
+            type: nextAsset.type as 'IMAGE' | 'VIDEO',
+        });
+        setAssetIndex(nextIndex);
     } else {
         setError("Failed to load any assets from the playlist.");
     }
-  
+
     setIsFading(false);
-  
-  }, [assetIndex, playlist, getAssetWithRetry, currentMedia]);
+
+}, [assetIndex, playlist, getAssetWithRetry, currentMedia]);
 
 
   // --- Effects ---
@@ -297,6 +284,7 @@ export default function Home() {
         if (fetchedAssets.length === 0 && fetchPage > 1) {
             setFetchPage(1); // This will trigger a re-fetch for page 1
             setPlaylist([]); // Clear the old playlist
+            setAssetIndex(0);
             localStorage.removeItem(LOCAL_STORAGE_PAGE_KEY);
             return;
         }
@@ -330,17 +318,12 @@ export default function Home() {
             return true;
         });
 
-        const newPlaylist = fetchPage === 1 ? shuffleArray(filteredAssets) : [...playlist, ...filteredAssets];
+        const newPlaylist = fetchPage === 1 
+            ? shuffleArray(filteredAssets) 
+            : [...playlist, ...shuffleArray(filteredAssets)];
 
         if (playlist.length === 0 && newPlaylist.length > 0) {
              setPlaylist(newPlaylist);
-             const firstAsset = newPlaylist[0];
-             const firstUrl = await getAssetWithRetry(firstAsset);
-             if (firstUrl) {
-                setCurrentMedia({ url: firstUrl, id: firstAsset.id, type: firstAsset.type as 'IMAGE' | 'VIDEO' });
-             } else {
-                 setAssetIndex(1); // Will be picked up by the other effect
-             }
          } else {
             setPlaylist(newPlaylist);
          }
@@ -355,6 +338,24 @@ export default function Home() {
     fetchAssets();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configError, fetchPage]);
+
+  // Initial asset load
+  useEffect(() => {
+    if (!isLoading && !currentMedia && playlist.length > 0 && assetIndex < playlist.length) {
+        const loadInitialAsset = async () => {
+            const asset = playlist[assetIndex];
+            const url = await getAssetWithRetry(asset);
+            if (url) {
+                setCurrentMedia({ url, id: asset.id, type: asset.type as 'IMAGE' | 'VIDEO' });
+            } else {
+                // If first asset fails, try to advance
+                advanceToNextAsset();
+            }
+        };
+        loadInitialAsset();
+    }
+  }, [isLoading, currentMedia, playlist, assetIndex, getAssetWithRetry, advanceToNextAsset]);
+
 
   // Asset rotation timer for images
   useEffect(() => {
@@ -391,12 +392,6 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [currentMedia, isLoading, error]); 
 
-  // Recursive effect to handle asset loading failures from initial load
-  useEffect(() => {
-    if (!isLoading && !currentMedia && playlist.length > 0) {
-        advanceToNextAsset();
-    }
-  }, [isLoading, currentMedia, playlist, advanceToNextAsset]);
 
   // Clock
   useEffect(() => {
