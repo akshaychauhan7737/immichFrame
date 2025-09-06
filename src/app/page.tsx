@@ -684,8 +684,8 @@ export default function Home() {
       )}
       
       {/* Render current and next media for smooth transition */}
-      {currentMedia && renderMedia(currentMedia, true)}
-      {nextMedia && renderMedia(nextMedia, false)}
+      {renderMedia(currentMedia, true)}
+      {renderMedia(nextMedia, false)}
 
 
       {/* Top Left: Air Pollution */}
@@ -772,7 +772,7 @@ export default function Home() {
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-end justify-between p-4 md:p-6 text-white">
         {/* Left Box: Time and Progress */}
         <div className="flex items-end gap-4">
-            <div className="w-[180px] space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm">
+            <div className="w-[200px] space-y-1 rounded-lg bg-black/30 p-3 backdrop-blur-sm">
                 <div className="text-4xl font-semibold">
                     {currentTime}
                 </div>
@@ -821,5 +821,3 @@ export default function Home() {
     </main>
   );
 }
-
-  
