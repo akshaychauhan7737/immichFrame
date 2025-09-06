@@ -129,10 +129,17 @@ export function useImmich() {
         let originalUrl: string | null = null;
         let previewUrl: string | null = null;
         
-        [originalUrl, previewUrl] = await Promise.all([
-            getAssetUrl(asset, 'original'),
-            getAssetUrl(asset, 'preview')
-        ]);
+        if (asset.type === 'IMAGE') {
+            [originalUrl, previewUrl] = await Promise.all([
+                getAssetUrl(asset, 'original'),
+                getAssetUrl(asset, 'preview') // Keep preview for background
+            ]);
+        } else { // VIDEO
+            [originalUrl, previewUrl] = await Promise.all([
+                getAssetUrl(asset, 'original'),
+                getAssetUrl(asset, 'preview')
+            ]);
+        }
 
         if (originalUrl && previewUrl) {
              return {

@@ -45,7 +45,6 @@ export function useSlideshow(immich: ImmichHook) {
   const videoDurationRef = useRef<number>(0);
 
 
-  // --- Core Slideshow Logic ---
   const setCurrentMediaAndMarkVisited = useCallback((media: MediaAsset | null) => {
     setCurrentMedia(media);
     if (media?.asset) {
@@ -59,6 +58,7 @@ export function useSlideshow(immich: ImmichHook) {
     }
   }, []);
 
+  // --- Core Slideshow Logic ---
   const preloadNextAsset = useCallback(async (currentPlaylist: ImmichAsset[]) => {
     let mutablePlaylist = [...currentPlaylist];
     let nextAssetToLoad = mutablePlaylist.shift();
@@ -105,7 +105,7 @@ export function useSlideshow(immich: ImmichHook) {
 
       if (nextMedia) {
         // Promote next to current
-        setCurrentMediaAndMarkVisited({ ...nextMedia });
+        setCurrentMediaAndMarkVisited(nextMedia);
 
         // Preload the next asset and update the playlist
         const updatedPlaylist = await preloadNextAsset(playlist);
