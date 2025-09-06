@@ -78,6 +78,11 @@ export function useSlideshow(immich: ImmichHook) {
       }
     }
   
+    if (!nextAssetToLoad) {
+      setNextMedia(null);
+      return [];
+    }
+    
     const newMedia = await getAssetWithRetry(nextAssetToLoad);
     
     if (newMedia) {
@@ -96,8 +101,11 @@ export function useSlideshow(immich: ImmichHook) {
     const oldMedia = currentMedia;
     
     flushSync(async () => {
-      setIsFading(true);
-      await delay(500); // Wait for fade-out
+      // Only apply fade transition for images
+      if (nextMedia?.type !== 'VIDEO') {
+        setIsFading(true);
+        await delay(500); // Wait for fade-out
+      }
 
       if (nextMedia) {
         // Promote next to current
@@ -119,7 +127,9 @@ export function useSlideshow(immich: ImmichHook) {
         revokeAssetUrls(oldMedia);
       }
       
-      setIsFading(false);
+      if (nextMedia?.type !== 'VIDEO') {
+        setIsFading(false);
+      }
     });
   }, [nextMedia, playlist, currentMedia, preloadNextAsset, revokeAssetUrls, isFading, setCurrentMediaAndMarkVisited]);
   
