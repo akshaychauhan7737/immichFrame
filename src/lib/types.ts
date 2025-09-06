@@ -1,5 +1,3 @@
-
-
 export interface ImmichAsset {
   id: string;
   deviceAssetId: string;
@@ -32,6 +30,14 @@ export interface ImmichAsset {
     country?: string;
     [key: string]: any;
   }
+}
+
+export interface MediaAsset {
+  id: string;
+  url: string;
+  type: 'IMAGE' | 'VIDEO';
+  asset: ImmichAsset;
+  previewUrl: string; // For video posters and image previews
 }
 
 export interface ImmichAlbum {
