@@ -28,6 +28,7 @@ const IS_ARCHIVED_INCLUDED = process.env.NEXT_PUBLIC_IMMICH_INCLUDE_ARCHIVED ===
 const LATITUDE = process.env.NEXT_PUBLIC_LATITUDE;
 const LONGITUDE = process.env.NEXT_PUBLIC_LONGITUDE;
 const OPENWEATHER_API_KEY = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
+const MAX_VIDEO_DURATION = parseInt(process.env.NEXT_PUBLIC_MAX_VIDEO_DURATION_SECONDS || '30', 10);
 
 // We use a local proxy to avoid CORS issues for Immich.
 const PROXY_URL = '/api/immich';
@@ -43,6 +44,15 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+
+function parseDuration(duration: string): number {
+    const parts = duration.split(':');
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    const seconds = parseFloat(parts[2]);
+    return hours * 3600 + minutes * 60 + seconds;
+}
+
 
 const getWeatherInfo = (code: number): { Icon: React.ElementType, name: string } => {
     // OpenWeatherMap Weather condition codes
@@ -299,6 +309,10 @@ export default function Home() {
                 }
                 // Fallback for assets without EXIF data
                 return DISPLAY_MODE === 'landscape'; 
+            }
+            if (asset.type === 'VIDEO') {
+                const duration = parseDuration(asset.duration);
+                return duration <= MAX_VIDEO_DURATION;
             }
             return true;
         });
