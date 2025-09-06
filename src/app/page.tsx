@@ -268,7 +268,7 @@ export default function Home() {
         }
         
         const data = await response.json();
-        const fetchedAssets: ImmichAsset[] = data.assets || [];
+        const fetchedAssets: ImmichAsset[] = data.assets.items || [];
         
         // If we fetched a page > 1 and got no assets, loop back to page 1
         if (fetchedAssets.length === 0 && fetchPage > 1) {
@@ -351,9 +351,11 @@ export default function Home() {
     setProgress(0);
     
     let displayDuration = DURATION;
-    if (currentMedia.type === 'VIDEO' && videoRef.current && videoRef.current.duration) {
+    if (currentMedia.type === 'VIDEO' && videoRef.current && !isNaN(videoRef.current.duration)) {
         displayDuration = videoRef.current.duration * 1000;
     }
+
+    if (displayDuration <= 0) return;
 
     const interval = setInterval(() => {
       setProgress(p => Math.min(p + (100 / (displayDuration / 100)), 100));
@@ -524,7 +526,10 @@ export default function Home() {
                     onEnded={advanceToNextAsset}
                     onLoadedData={() => {
                         // This forces a re-render to update duration for progress bar
-                        if(videoRef.current) setProgress(0);
+                        if(videoRef.current) {
+                           // Force a state update to re-evaluate the progress bar duration
+                           setProgress(0);
+                        }
                     }}
                     autoPlay
                     muted
