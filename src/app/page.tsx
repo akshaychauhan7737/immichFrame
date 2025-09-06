@@ -268,16 +268,8 @@ export default function Home() {
     if (savedDate) {
         setTakenBefore(savedDate);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Save date to localStorage
-  useEffect(() => {
-    if (takenBefore) {
-      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, takenBefore);
-    } else {
-      localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
-    }
-  }, [takenBefore]);
 
   const handleDateReset = useCallback(() => {
     localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
@@ -326,15 +318,16 @@ export default function Home() {
       
       try {
         const requestBody: any = {
+              withExif: true,
               isFavorite: IS_FAVORITE_ONLY,
               isArchived: IS_ARCHIVED_INCLUDED ? undefined : false,
               size: ASSET_FETCH_PAGE_SIZE,
               sort: 'DESC',
-              withExif: true,
         };
 
-        if (takenBefore) {
-            requestBody.takenBefore = takenBefore;
+        const dateToFetch = takenBefore || localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
+        if (dateToFetch) {
+            requestBody.takenBefore = dateToFetch;
         }
 
         const response = await fetch(`${PROXY_URL}/search/metadata`, {
@@ -355,11 +348,13 @@ export default function Home() {
         const data = await response.json();
         const fetchedAssets: ImmichAsset[] = data.assets.items || [];
         
-        if (fetchedAssets.length === 0 && takenBefore) {
+        if (fetchedAssets.length === 0 && dateToFetch) {
             console.log("No more assets found, starting from the beginning.");
-            setTakenBefore(null); // This will trigger a re-fetch for the latest photos in the next cycle
+            setTakenBefore(null);
+            localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
             setPlaylist([]);
             setAssetIndex(0);
+            setIsFetching(true); // Trigger fetch from beginning
             return;
         }
 
@@ -399,15 +394,14 @@ export default function Home() {
             setPlaylist(newPlaylist);
         }
         
-        // Always update takenBefore from the original fetched list to ensure pagination continues
-        // even if the whole page is filtered out.
         if (fetchedAssets.length > 0) {
             const lastAsset = fetchedAssets[fetchedAssets.length - 1];
-            // The API returns fileCreatedAt which is more reliable for photos from various sources.
-            setTakenBefore(lastAsset.createdAt); 
-        } else if (takenBefore) {
-             // If we got nothing and we had a 'takenBefore' date, it means we're at the end. Loop back.
+            const newTakenBefore = lastAsset.createdAt;
+            setTakenBefore(newTakenBefore);
+            localStorage.setItem(LOCAL_STORAGE_DATE_KEY, newTakenBefore);
+        } else if (dateToFetch) {
              setTakenBefore(null);
+             localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
         }
         
       } catch (e: any) {
@@ -418,7 +412,6 @@ export default function Home() {
       }
     };
     
-    // This condition triggers the fetch
     if (!configError && (isFetching || (isLoading && playlist.length === 0))) {
         fetchAssets();
     }
@@ -429,14 +422,13 @@ export default function Home() {
   useEffect(() => {
     if (!isLoading && !currentMedia && playlist.length > 0) {
         const loadInitialAsset = async () => {
-            const asset = playlist[0]; // Start with the first asset in shuffled list
+            const asset = playlist[0];
             if (asset) {
                 const mediaAsset = await getAssetWithRetry(asset);
                 if (mediaAsset) {
                     setCurrentMedia(mediaAsset);
-                    preloadNextAsset(1); // Preload the next one
+                    preloadNextAsset(1);
                 } else {
-                    // If first asset fails, try to advance
                     advanceToNextAsset();
                 }
             }
@@ -810,7 +802,3 @@ export default function Home() {
     </main>
   );
 }
-
-    
-
-    
