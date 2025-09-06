@@ -9,7 +9,9 @@ import { useToast } from './use-toast';
 
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
-const LOCAL_STORAGE_DATE_KEY = 'immich-view-taken-before';
+export const LOCAL_STORAGE_DATE_KEY = 'immich-view-taken-before';
+export const LOCAL_STORAGE_UPDATED_KEY = 'immich-view-updated-after';
+
 
 // --- Helper Functions ---
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -51,6 +53,9 @@ export function useSlideshow(immich: ImmichHook) {
       if (takenDate) {
         localStorage.setItem(LOCAL_STORAGE_DATE_KEY, takenDate);
       }
+      if (media.asset.updatedAt) {
+        localStorage.setItem(LOCAL_STORAGE_UPDATED_KEY, media.asset.updatedAt);
+      }
     }
   }, []);
 
@@ -62,7 +67,7 @@ export function useSlideshow(immich: ImmichHook) {
     if (!nextAssetToLoad) {
       setIsFetching(true);
       setError(null);
-      const newAssets = await fetchAssets(null);
+      const newAssets = await fetchAssets();
       setIsFetching(false);
 
       if (newAssets && newAssets.length > 0) {
@@ -86,7 +91,7 @@ export function useSlideshow(immich: ImmichHook) {
       // If loading a specific asset fails, recursively try the next one.
       return await preloadNextAsset(mutablePlaylist);
     }
-  }, [getAssetWithRetry, fetchAssets, setError]);
+  }, [getAssetWithRetry, fetchAssets, setError, setIsFetching]);
 
 
   const advanceToNextAsset = useCallback(async () => {
@@ -134,7 +139,7 @@ export function useSlideshow(immich: ImmichHook) {
 
     const startSlideshow = async () => {
       setIsFetching(true);
-      const initialAssets = await fetchAssets(null);
+      const initialAssets = await fetchAssets();
       setIsFetching(false);
 
       if (!initialAssets || initialAssets.length === 0) {
@@ -230,6 +235,8 @@ export function useSlideshow(immich: ImmichHook) {
     } else {
         localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
     }
+    // Always remove the updatedAfter key when changing timeline
+    localStorage.removeItem(LOCAL_STORAGE_UPDATED_KEY);
     
     // Reset state and re-initialize
     setPlaylist([]);
@@ -237,7 +244,7 @@ export function useSlideshow(immich: ImmichHook) {
     setNextMedia(null);
     setIsLoading(true);
 
-    const newAssets = await fetchAssets(null);
+    const newAssets = await fetchAssets();
     if (newAssets && newAssets.length > 0) {
         let mutablePlaylist = [...newAssets];
         const firstAsset = mutablePlaylist.shift();

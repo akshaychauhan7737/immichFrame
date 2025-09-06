@@ -4,6 +4,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { ImmichAsset, MediaAsset } from '@/lib/types';
 import { useToast } from './use-toast';
+import { LOCAL_STORAGE_DATE_KEY, LOCAL_STORAGE_UPDATED_KEY } from './useSlideshow';
 
 // --- Environment-based Configuration ---
 const SERVER_URL = process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
@@ -26,13 +27,14 @@ export function useImmich() {
         return null;
     }, []);
 
-    const fetchAssets = useCallback(async (initialTakenBefore: string | null): Promise<ImmichAsset[] | null> => {
+    const fetchAssets = useCallback(async (): Promise<ImmichAsset[] | null> => {
         if (configError) {
             console.error("fetchAssets aborted due to config error:", configError);
             return null;
         }
 
-        const takenBefore = initialTakenBefore || localStorage.getItem('immich-view-taken-before');
+        const takenBefore = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
+        const updatedAfter = localStorage.getItem(LOCAL_STORAGE_UPDATED_KEY);
 
         try {
             const requestBody: any = {
@@ -45,6 +47,9 @@ export function useImmich() {
             
             if (takenBefore) {
                 requestBody.takenBefore = takenBefore;
+            }
+            if (updatedAfter) {
+                requestBody.updatedAfter = updatedAfter;
             }
 
             const response = await fetch(`${API_BASE_URL}/search/metadata`, {
@@ -67,9 +72,10 @@ export function useImmich() {
 
             if (items.length === 0 && takenBefore) {
                 console.log("Reached end of timeline, looping back to the beginning.");
-                localStorage.removeItem('immich-view-taken-before');
+                localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
+                localStorage.removeItem(LOCAL_STORAGE_UPDATED_KEY);
                 // Immediately re-fetch from the start.
-                return fetchAssets(null);
+                return fetchAssets();
             }
 
             return items;
@@ -117,7 +123,7 @@ export function useImmich() {
             console.error(`Error fetching asset ${asset.id} (${type}): ${message}`);
             return null;
         }
-    }, [API_KEY]);
+    }, []);
 
     const getAssetWithRetry = useCallback(async (asset: ImmichAsset, retries = 1): Promise<MediaAsset | null> => {
         let originalUrl: string | null = null;
