@@ -33,8 +33,8 @@ const LATITUDE = process.env.NEXT_PUBLIC_LATITUDE;
 const LONGITUDE = process.env.NEXT_PUBLIC_LONGITUDE;
 const OPENWEATHER_API_KEY = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
 
-// Connect directly to the Immich API endpoint.
-const API_BASE_URL = `${process.env.NEXT_PUBLIC_IMMICH_SERVER_URL}/api`;
+// Use the Next.js proxy to avoid CORS issues.
+const API_BASE_URL = '/api/immich';
 
 // --- Helper Functions ---
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
