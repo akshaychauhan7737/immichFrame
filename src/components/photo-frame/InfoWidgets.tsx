@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { WeatherData, AirPollutionData, ImmichAsset } from '@/lib/types';
@@ -7,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
-import { Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind, Droplets, Thermometer, Camera, Aperture, MapPin, Calendar, Settings } from 'lucide-react';
+import { Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind, Droplets, Thermometer, Camera, Aperture, MapPin, Calendar, Settings, Hash } from 'lucide-react';
 
 // --- Helper Functions ---
 const getWeatherInfo = (code: number): { Icon: React.ElementType, name: string } => {
@@ -173,7 +174,7 @@ interface PhotoDetailsWidgetProps {
 export function PhotoDetailsWidget({ asset }: PhotoDetailsWidgetProps) {
   if (!asset) return null;
 
-  const { exifInfo, fileCreatedAt } = asset;
+  const { id, exifInfo, fileCreatedAt } = asset;
   const location = [exifInfo?.city, exifInfo?.state].filter(Boolean).join(', ');
   const photoDate = fileCreatedAt ? new Date(fileCreatedAt) : null;
   const isDateValid = photoDate && !isNaN(photoDate.getTime());
@@ -214,6 +215,12 @@ export function PhotoDetailsWidget({ asset }: PhotoDetailsWidgetProps) {
           <div className="flex items-center gap-2 text-sm text-white/80 pt-1">
             <span>{exposure}</span>
             <Aperture size={18} className="shrink-0" />
+          </div>
+        )}
+        {id && (
+          <div className="flex items-center gap-2 text-xs text-white/60 pt-2">
+            <span className='font-mono'>{id}</span>
+            <Hash size={14} className="shrink-0" />
           </div>
         )}
       </div>
