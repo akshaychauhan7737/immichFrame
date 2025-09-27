@@ -1,13 +1,13 @@
 
 "use client";
 
-import type { WeatherData, AirPollutionData, ImmichAsset } from '@/lib/types';
+import type { WeatherData, AirPollutionData, ImmichAsset, TimelineBucket } from '@/lib/types';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Progress } from "@/components/ui/progress";
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { Calendar as CalendarPicker } from '@/components/ui/calendar';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sun, Cloud, CloudRain, Snowflake, CloudSun, Zap, Wind, Droplets, Thermometer, Camera, Aperture, MapPin, Calendar, Settings, Hash } from 'lucide-react';
 
 // --- Helper Functions ---
@@ -133,10 +133,12 @@ export function AirPollutionWidget({ airPollution, children }: AirPollutionWidge
 
 // --- Settings Popover ---
 interface SettingsPopoverProps {
-  onDateSelect: (date: Date) => void;
-  onDateReset: () => void;
+  buckets: TimelineBucket[];
+  onBucketSelect: (bucket: TimelineBucket) => void;
+  onTimelineReset: () => void;
 }
-export function SettingsPopover({ onDateSelect, onDateReset }: SettingsPopoverProps) {
+
+export function SettingsPopover({ buckets, onBucketSelect, onTimelineReset }: SettingsPopoverProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -144,19 +146,27 @@ export function SettingsPopover({ onDateSelect, onDateReset }: SettingsPopoverPr
           <Settings className="h-3 w-3" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto">
+      <PopoverContent className="w-80">
         <div className="grid gap-4">
           <div className="space-y-2">
             <h4 className="font-medium leading-none">Timeline Settings</h4>
-            <p className="text-sm text-muted-foreground">Jump to a specific date.</p>
+            <p className="text-sm text-muted-foreground">Jump to a specific month.</p>
           </div>
           <div className='flex flex-col items-center gap-2'>
-            <CalendarPicker
-              mode="single"
-              onSelect={(date) => date && onDateSelect(date)}
-              initialFocus
-            />
-            <Button variant="outline" onClick={onDateReset} className='w-full'>
+            <ScrollArea className="h-72 w-full rounded-md border">
+              <div className="p-4">
+                {buckets.map((bucket) => (
+                  <div
+                    key={bucket.timeBucket}
+                    className="text-sm cursor-pointer hover:bg-muted p-2 rounded-md"
+                    onClick={() => onBucketSelect(bucket)}
+                  >
+                    {format(new Date(bucket.timeBucket), 'MMMM yyyy')} ({bucket.count})
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+            <Button variant="outline" onClick={onTimelineReset} className='w-full'>
               Reset to Latest
             </Button>
           </div>

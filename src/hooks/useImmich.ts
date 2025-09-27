@@ -63,6 +63,28 @@ export function useImmich() {
         return null;
     }, []);
 
+    const fetchTimelineBuckets = useCallback(async (): Promise<TimelineBucket[] | null> => {
+        if (configError) {
+            console.error("fetchTimelineBuckets aborted due to config error:", configError);
+            return null;
+        }
+        try {
+            const bucketsUrl = `${API_BASE_URL}/timeline/buckets?visibility=timeline&withPartners=true&withStacked=true`;
+            const bucketsResponse = await fetch(bucketsUrl, {
+                method: 'GET',
+                headers: { 'x-api-key': API_KEY as string, 'Accept': 'application/json' },
+            });
+            if (!bucketsResponse.ok) {
+                throw new Error(`Failed to fetch timeline buckets: ${bucketsResponse.statusText}`);
+            }
+            const buckets: TimelineBucket[] = await bucketsResponse.json();
+            return buckets;
+        } catch (e) {
+            console.error("Error fetching timeline buckets:", e);
+            return null;
+        }
+    }, [configError]);
+
     const fetchAssets = useCallback(async (searchDate?: Date): Promise<ImmichAsset[] | null> => {
         if (configError) {
             console.error("fetchAssets aborted due to config error:", configError);
@@ -121,39 +143,28 @@ export function useImmich() {
             return null;
         }
         try {
-            // 1. Fetch all available timeline buckets
-            const bucketsUrl = `${API_BASE_URL}/timeline/buckets?visibility=timeline&withPartners=true&withStacked=true`;
-            const bucketsResponse = await fetch(bucketsUrl, {
-                method: 'GET',
-                headers: { 'x-api-key': API_KEY as string, 'Accept': 'application/json' },
-            });
-            if (!bucketsResponse.ok) {
-                throw new Error(`Failed to fetch timeline buckets: ${bucketsResponse.statusText}`);
-            }
-            const buckets: TimelineBucket[] = await bucketsResponse.json();
+            const buckets = await fetchTimelineBuckets();
 
             if (!buckets || buckets.length === 0) {
                 return null; // No buckets found
             }
 
-            // 2. Get the most recent bucket
             const latestBucket = buckets[0];
             const dateToTry = new Date(latestBucket.timeBucket);
             console.log(`Found latest bucket, searching for assets in ${dateToTry.toLocaleDateString()}`);
 
-            // 3. Fetch the assets from that bucket
             const assets = await fetchAssets(dateToTry);
 
             if (assets && assets.length > 0) {
                 return { assets, foundDate: dateToTry };
             }
 
-            return null; // No assets found in the latest bucket
+            return null;
         } catch (e) {
             console.error("Error finding initial assets:", e);
             return null;
         }
-    }, [configError, fetchAssets]);
+    }, [configError, fetchAssets, fetchTimelineBuckets]);
 
 
     const getAssetUrl = useCallback(async (asset: ImmichAsset, type: 'original' | 'preview'): Promise<string | null> => {
@@ -246,5 +257,5 @@ export function useImmich() {
         }, 2000);
     }, []);
 
-    return { fetchAssets, findInitialAssets, getAssetWithRetry, revokeAssetUrls, configError };
+    return { fetchAssets, findInitialAssets, getAssetWithRetry, revokeAssetUrls, fetchTimelineBuckets, configError };
 }

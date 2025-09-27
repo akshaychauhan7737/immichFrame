@@ -1,7 +1,8 @@
+
 "use client";
 
-import type { MediaAsset } from '@/lib/types';
-import { useRef } from 'react';
+import type { MediaAsset, TimelineBucket } from '@/lib/types';
+import { useRef, useState, useEffect }from 'react';
 
 import { useToast } from '@/hooks/use-toast';
 import { useClock } from '@/hooks/useClock';
@@ -22,6 +23,7 @@ export default function Home() {
   const { currentTime, currentDate } = useClock();
   const { weather, airPollution } = useWeather();
   const immich = useImmich();
+  const [buckets, setBuckets] = useState<TimelineBucket[]>([]);
   
   const {
     currentMedia,
@@ -34,6 +36,17 @@ export default function Home() {
     handleTimelineChange,
     advanceToNextAsset,
   } = useSlideshow(immich);
+
+  useEffect(() => {
+    const getBuckets = async () => {
+      const fetchedBuckets = await immich.fetchTimelineBuckets();
+      if (fetchedBuckets) {
+        setBuckets(fetchedBuckets);
+      }
+    };
+    getBuckets();
+  }, [immich]);
+
 
   // --- Render Logic ---
 
@@ -50,7 +63,11 @@ export default function Home() {
 
       {/* --- Overlays --- */}
       <AirPollutionWidget airPollution={airPollution}>
-        <SettingsPopover onDateSelect={handleTimelineChange} onDateReset={() => handleTimelineChange(null)} />
+        <SettingsPopover 
+          buckets={buckets}
+          onBucketSelect={(bucket) => handleTimelineChange(new Date(bucket.timeBucket))} 
+          onTimelineReset={() => handleTimelineChange(null)} 
+        />
       </AirPollutionWidget>
       
       <WeatherWidget weather={weather} />
