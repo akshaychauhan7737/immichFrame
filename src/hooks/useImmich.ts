@@ -77,7 +77,7 @@ export function useImmich() {
         const timeBucket = localStorage.getItem(LOCAL_STORAGE_DATE_KEY) || new Date().toISOString();
 
         try {
-            const url = `${API_BASE_URL}/timeline/bucket?timeBucket=${encodeURIComponent(timeBucket)}&visibility=timeline&withPartners=true&withStacked=true`;
+            const url = `${API_BASE_URL}/timeline/bucket?timeBucket=${encodeURIComponent(timeBucket)}&visibility=timeline&withPartners=true&withStacked=true&size=${ASSET_FETCH_PAGE_SIZE}`;
             
             const response = await fetch(url, {
                 method: 'GET',
@@ -115,7 +115,7 @@ export function useImmich() {
         let url: string;
         if (asset.type === 'VIDEO') {
             url = type === 'original' 
-                ? `${API_BASE_URL}/assets/${asset.id}/video/playback`
+                ? `${API_BASE_URL}/assets/${asset.id}/video/playback?c=${encodeURIComponent(asset.thumbhash)}`
                 : `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview&c=${encodeURIComponent(asset.thumbhash)}`;
         } else { // IMAGE
              url = `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview&c=${encodeURIComponent(asset.thumbhash)}`;
