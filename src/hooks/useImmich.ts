@@ -116,11 +116,9 @@ export function useImmich() {
         if (asset.type === 'VIDEO') {
             url = type === 'original' 
                 ? `${API_BASE_URL}/assets/${asset.id}/video/playback`
-                : `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview`;
+                : `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview&c=${encodeURIComponent(asset.thumbhash)}`;
         } else { // IMAGE
-             url = type === 'original'
-                ? `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview` // Use preview for original to support HEIC
-                : `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview`;
+             url = `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview&c=${encodeURIComponent(asset.thumbhash)}`;
         }
 
         const controller = new AbortController();
