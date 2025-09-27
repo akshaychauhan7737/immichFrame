@@ -9,7 +9,7 @@ import { useToast } from './use-toast';
 
 // --- Configuration ---
 const DURATION = parseInt(process.env.NEXT_PUBLIC_IMAGE_DISPLAY_DURATION || '15000', 10);
-export const LOCAL_STORAGE_DATE_KEY = 'immich-view-taken-before';
+export const LOCAL_STORAGE_DATE_KEY = 'immich-view-time-bucket';
 
 
 // --- Helper Functions ---
@@ -46,10 +46,9 @@ export function useSlideshow(immich: ImmichHook) {
   const setCurrentMediaAndMarkVisited = useCallback((media: MediaAsset | null) => {
     setCurrentMedia(media);
     if (media?.asset) {
-      const takenDate = media.asset.fileCreatedAt;
-      if (takenDate) {
-        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, takenDate);
-      }
+      const bucketDate = new Date(media.asset.fileCreatedAt);
+      bucketDate.setHours(0, 0, 0, 0);
+      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, bucketDate.toISOString());
     }
   }, []);
 
@@ -136,18 +135,18 @@ export function useSlideshow(immich: ImmichHook) {
       setIsLoading(true);
       setError(null);
 
-      const savedDate = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
+      const savedBucket = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
       let initialResult: { assets: ImmichAsset[], foundDate: Date } | null;
 
-      if (savedDate) {
-        const assets = await fetchAssets(new Date(savedDate));
-        initialResult = assets ? { assets, foundDate: new Date(savedDate) } : null;
+      if (savedBucket) {
+        const assets = await fetchAssets(new Date(savedBucket));
+        initialResult = assets ? { assets, foundDate: new Date(savedBucket) } : null;
       } else {
         initialResult = await findInitialAssets();
       }
 
       if (!initialResult || initialResult.assets.length === 0) {
-        setError("No photos found. Searched up to 3 years back. Check your Immich settings or server connection.");
+        setError("No photos found. Check your Immich settings or server connection.");
         setIsLoading(false);
         return;
       }
@@ -264,7 +263,7 @@ export function useSlideshow(immich: ImmichHook) {
 
     toast({
         title: date ? "Timeline Set" : "Timeline Reset",
-        description: date ? `Searching for photos before ${date.toLocaleDateString()}.` : "Searching for latest photos.",
+        description: date ? `Searching for photos from ${date.toLocaleDateString()}.` : "Searching for latest photos.",
     });
   }, [fetchAssets, findInitialAssets, getAssetWithRetry, preloadNextAsset, toast, setCurrentMediaAndMarkVisited]);
 

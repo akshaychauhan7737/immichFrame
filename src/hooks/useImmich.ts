@@ -9,7 +9,6 @@ import { LOCAL_STORAGE_DATE_KEY } from './useSlideshow';
 // --- Environment-based Configuration ---
 const SERVER_URL = process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
 const API_KEY = process.env.NEXT_PUBLIC_IMMICH_API_KEY;
-const ASSET_FETCH_PAGE_SIZE = 100;
 const API_BASE_URL = '/api/immich';
 
 const FETCH_TIMEOUT = 10000; // 10 seconds
@@ -98,13 +97,17 @@ export function useImmich() {
             if (savedDate) {
                 return savedDate;
             }
-            // If no date is saved, use the start of the current day.
-            const today = new Date();
-            today.setHours(0, 0, 0, 0); 
-            return today.toISOString();
+            // If no date is saved, get the latest from buckets
+            return '';
         };
 
         const timeBucket = getTimeBucket();
+        if (!timeBucket) {
+            // This case should be handled by findInitialAssets, but as a fallback:
+            const initial = await findInitialAssets();
+            return initial?.assets || [];
+        }
+
 
         try {
             const url = `${API_BASE_URL}/timeline/bucket?timeBucket=${encodeURIComponent(timeBucket)}&visibility=timeline&withPartners=true&withStacked=true`;
@@ -209,14 +212,14 @@ export function useImmich() {
         let originalUrl: string | null = null;
         let previewUrl: string | null = null;
         
+        // For both IMAGE and VIDEO, the preview-sized thumbnail is sufficient and compatible.
+        // For videos, we still need the separate playback URL.
+        previewUrl = await getAssetUrl(asset, 'preview');
+
         if (asset.type === 'IMAGE') {
-            previewUrl = await getAssetUrl(asset, 'preview');
             originalUrl = previewUrl; 
         } else { // VIDEO
-            [originalUrl, previewUrl] = await Promise.all([
-                getAssetUrl(asset, 'original'),
-                getAssetUrl(asset, 'preview')
-            ]);
+            originalUrl = await getAssetUrl(asset, 'original');
         }
 
         if (originalUrl && previewUrl) {
