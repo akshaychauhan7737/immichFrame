@@ -5,6 +5,7 @@ import { useCallback, useMemo, useState } from 'react';
 import type { ImmichAsset, MediaAsset, TimelineBucketResponse } from '@/lib/types';
 import { useToast } from './use-toast';
 import { LOCAL_STORAGE_DATE_KEY } from './useSlideshow';
+import { subMonths } from 'date-fns';
 
 // --- Environment-based Configuration ---
 const SERVER_URL = process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
@@ -25,22 +26,17 @@ const transformColumnarToObjects = (data: TimelineBucketResponse): ImmichAsset[]
     const count = data.id.length;
 
     for (let i = 0; i < count; i++) {
-        // Find the corresponding exifInfo for the asset
         const asset: ImmichAsset = {
             id: data.id[i],
-            // Map other fields from columnar to object structure
             type: data.isImage[i] ? 'IMAGE' : 'VIDEO',
             isFavorite: data.isFavorite[i],
             duration: data.duration[i],
             fileCreatedAt: data.fileCreatedAt[i],
-            // The new endpoint doesn't seem to provide detailed exifInfo object,
-            // but provides some fields directly. We'll add what's available.
             exifInfo: {
                 city: data.city?.[i] || undefined,
-                state: undefined, // State not in response
+                state: undefined, 
                 country: data.country?.[i] || undefined
             },
-            // Add any other fields from ImmichAsset that are present in the response
             ownerId: data.ownerId[i],
             isTrashed: data.isTrashed[i],
             livePhotoVideoId: data.livePhotoVideoId[i],
@@ -68,20 +64,22 @@ export function useImmich() {
         return null;
     }, []);
 
-    const fetchAssets = useCallback(async (): Promise<ImmichAsset[] | null> => {
+    const fetchAssets = useCallback(async (searchDate?: Date): Promise<ImmichAsset[] | null> => {
         if (configError) {
             console.error("fetchAssets aborted due to config error:", configError);
             return null;
         }
 
         const getTimeBucket = () => {
+            if (searchDate) return searchDate.toISOString();
+
             const savedDate = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
             if (savedDate) {
                 return savedDate;
             }
-            // If no date is saved, use the start of the current day (d-1 logic)
+            // If no date is saved, use the start of the current day.
             const today = new Date();
-            today.setHours(0, 0, 0, 0); // Set to midnight
+            today.setHours(0, 0, 0, 0); 
             return today.toISOString();
         };
 
@@ -106,11 +104,10 @@ export function useImmich() {
             const data: TimelineBucketResponse = await response.json();
             const items = transformColumnarToObjects(data);
 
-            if (items.length === 0) {
-                console.log("Reached end of timeline or no assets in bucket, looping back to the beginning.");
+            if (items.length === 0 && !searchDate) { // only loop if we are not in a specific search
+                console.log("Reached end of timeline, looping back to the beginning.");
                 localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
-                // We'll let the next call to fetchAssets handle fetching from the start.
-                return [];
+                return await fetchAssets(); // fetch from the start
             }
 
             return items;
@@ -120,12 +117,36 @@ export function useImmich() {
         }
     }, [configError]);
 
+    const findInitialAssets = useCallback(async (searchDate = new Date(), attempt = 0): Promise<{ assets: ImmichAsset[], foundDate: Date } | null> => {
+        if (attempt > 36) { // Stop after 3 years
+            return null;
+        }
+
+        const dateToTry = new Date(searchDate);
+        dateToTry.setDate(1); // Start from the 1st of the month
+        if (attempt > 0) {
+            dateToTry.setMonth(dateToTry.getMonth() - 1);
+        }
+
+        console.log(`Searching for assets in ${dateToTry.toLocaleDateString()}`);
+        const assets = await fetchAssets(dateToTry);
+
+        if (assets && assets.length > 0) {
+            return { assets, foundDate: dateToTry };
+        } else if (assets) { // API returned success, but no assets. Try previous month.
+            return await findInitialAssets(dateToTry, attempt + 1);
+        } else { // API call failed
+            return null;
+        }
+    }, [fetchAssets]);
+
+
     const getAssetUrl = useCallback(async (asset: ImmichAsset, type: 'original' | 'preview'): Promise<string | null> => {
         if (!API_KEY) return null;
 
         let url: string;
         if (asset.type === 'VIDEO') {
-            url = type === 'original' 
+             url = type === 'original' 
                 ? `${API_BASE_URL}/assets/${asset.id}/video/playback?c=${encodeURIComponent(asset.thumbhash)}`
                 : `${API_BASE_URL}/assets/${asset.id}/thumbnail?size=preview&c=${encodeURIComponent(asset.thumbhash)}`;
         } else { // IMAGE
@@ -148,7 +169,7 @@ export function useImmich() {
             
             const blob = await res.blob();
             const blobUrl = URL.createObjectURL(blob);
-            setUrlsToRevoke(prev => [...prev, blobUrl]); // Track for later cleanup
+            setUrlsToRevoke(prev => [...prev, blobUrl]);
             return blobUrl;
         } catch (e: any) {
             clearTimeout(timeoutId);
@@ -163,7 +184,6 @@ export function useImmich() {
         let previewUrl: string | null = null;
         
         if (asset.type === 'IMAGE') {
-            // For images (especially HEIC), use preview for both to ensure compatibility
             previewUrl = await getAssetUrl(asset, 'preview');
             originalUrl = previewUrl; 
         } else { // VIDEO
@@ -202,7 +222,6 @@ export function useImmich() {
 
     const revokeAssetUrls = useCallback((media: MediaAsset) => {
         if (!media) return;
-        // Delay revocation to ensure transitions complete
         setTimeout(() => {
             console.log("Revoking blob URLs for asset:", media.id);
             URL.revokeObjectURL(media.url);
@@ -212,5 +231,5 @@ export function useImmich() {
         }, 2000);
     }, []);
 
-    return { fetchAssets, getAssetWithRetry, revokeAssetUrls, configError };
+    return { fetchAssets, findInitialAssets, getAssetWithRetry, revokeAssetUrls, configError };
 }

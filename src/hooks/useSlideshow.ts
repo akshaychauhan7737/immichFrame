@@ -19,7 +19,7 @@ type ImmichHook = ReturnType<typeof useImmich>;
 
 export function useSlideshow(immich: ImmichHook) {
   const { toast } = useToast();
-  const { fetchAssets, getAssetWithRetry, revokeAssetUrls, configError } = immich;
+  const { fetchAssets, findInitialAssets, getAssetWithRetry, revokeAssetUrls, configError } = immich;
 
   // --- State Management ---
   const [playlist, setPlaylist] = useState<ImmichAsset[]>([]);
@@ -40,7 +40,6 @@ export function useSlideshow(immich: ImmichHook) {
   
   const [error, setError] = useState<string | null>(initialError);
 
-  // Use a ref to get the current video duration without causing re-renders
   const videoDurationRef = useRef<number>(0);
 
 
@@ -70,10 +69,8 @@ export function useSlideshow(immich: ImmichHook) {
         mutablePlaylist = newAssets;
         nextAssetToLoad = mutablePlaylist.shift();
       } else {
-        // If fetch fails or returns no assets, stop preloading.
         setNextMedia(null);
         if (newAssets === null) setError(`Failed to connect to Immich server.`);
-        // If newAssets is empty array, it means end of timeline was reached. UI will show message.
         return []; 
       }
     }
@@ -87,42 +84,34 @@ export function useSlideshow(immich: ImmichHook) {
     
     if (newMedia) {
       setNextMedia(newMedia);
-      return mutablePlaylist; // Return the rest of the playlist
+      return mutablePlaylist;
     } else {
-      // If loading a specific asset fails, recursively try the next one.
       return await preloadNextAsset(mutablePlaylist);
     }
   }, [getAssetWithRetry, fetchAssets, setError, setIsFetching]);
 
 
   const advanceToNextAsset = useCallback(async () => {
-    if (isFading) return; // Prevent multiple concurrent advances
+    if (isFading) return;
 
     const oldMedia = currentMedia;
     
     flushSync(async () => {
-      // Only apply fade transition for images
       if (nextMedia?.type !== 'VIDEO') {
         setIsFading(true);
-        await delay(500); // Wait for fade-out
+        await delay(500);
       }
 
       if (nextMedia) {
-        // Promote next to current
         setCurrentMediaAndMarkVisited(nextMedia);
-
-        // Preload the next asset and update the playlist
         const updatedPlaylist = await preloadNextAsset(playlist);
         setPlaylist(updatedPlaylist);
 
       } else {
-        // No next media was available, might be end of playlist. Trigger a preload.
         const updatedPlaylist = await preloadNextAsset(playlist);
         setPlaylist(updatedPlaylist);
-        // If preloadNextAsset was successful, nextMedia will be updated. If not, slideshow will pause.
       }
       
-      // Clean up old blob URL
       if (oldMedia) {
         revokeAssetUrls(oldMedia);
       }
@@ -144,17 +133,26 @@ export function useSlideshow(immich: ImmichHook) {
     }
 
     const startSlideshow = async () => {
-      setIsFetching(true);
-      const initialAssets = await fetchAssets();
-      setIsFetching(false);
+      setIsLoading(true);
+      setError(null);
 
-      if (!initialAssets || initialAssets.length === 0) {
-        setError("No photos found. Check your Immich settings or server connection.");
+      const savedDate = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
+      let initialResult: { assets: ImmichAsset[], foundDate: Date } | null;
+
+      if (savedDate) {
+        const assets = await fetchAssets(new Date(savedDate));
+        initialResult = assets ? { assets, foundDate: new Date(savedDate) } : null;
+      } else {
+        initialResult = await findInitialAssets();
+      }
+
+      if (!initialResult || initialResult.assets.length === 0) {
+        setError("No photos found. Searched up to 3 years back. Check your Immich settings or server connection.");
         setIsLoading(false);
         return;
       }
       
-      let mutablePlaylist = [...initialAssets];
+      let mutablePlaylist = [...initialResult.assets];
       const firstAssetToLoad = mutablePlaylist.shift();
 
       if (!firstAssetToLoad) {
@@ -170,9 +168,10 @@ export function useSlideshow(immich: ImmichHook) {
         return;
       }
       
+      // Set the date so subsequent fetches continue from here
+      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, initialResult.foundDate.toISOString());
       setCurrentMediaAndMarkVisited(firstMedia);
       
-      // Preload the next one immediately
       const updatedPlaylist = await preloadNextAsset(mutablePlaylist);
       setPlaylist(updatedPlaylist);
       setIsLoading(false);
@@ -198,7 +197,7 @@ export function useSlideshow(immich: ImmichHook) {
   // Force-play videos when they become the current media
   useEffect(() => {
     if (currentMedia?.type === 'VIDEO') {
-        const videoElement = document.querySelector('video'); // A bit fragile, but works for a single video player
+        const videoElement = document.querySelector('video');
         if (videoElement) {
             videoElement.play().catch(error => {
                 console.error("Video play failed:", error);
@@ -216,7 +215,6 @@ export function useSlideshow(immich: ImmichHook) {
       return;
     }
     
-    // Reset progress on media change
     setProgress(0);
     
     let displayDuration = DURATION;
@@ -242,15 +240,15 @@ export function useSlideshow(immich: ImmichHook) {
         localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
     }
     
-    // Reset state and re-initialize
     setPlaylist([]);
     setCurrentMediaAndMarkVisited(null);
     setNextMedia(null);
     setIsLoading(true);
 
-    const newAssets = await fetchAssets();
-    if (newAssets && newAssets.length > 0) {
-        let mutablePlaylist = [...newAssets];
+    const result = date ? { assets: await fetchAssets(date), foundDate: date } : await findInitialAssets();
+    
+    if (result && result.assets && result.assets.length > 0) {
+        let mutablePlaylist = [...result.assets];
         const firstAsset = mutablePlaylist.shift();
         if (firstAsset) {
             const firstMedia = await getAssetWithRetry(firstAsset);
@@ -266,9 +264,9 @@ export function useSlideshow(immich: ImmichHook) {
 
     toast({
         title: date ? "Timeline Set" : "Timeline Reset",
-        description: date ? `Searching for photos before ${date.toLocaleDateString()}.` : "Restarting from the most recent photos.",
+        description: date ? `Searching for photos before ${date.toLocaleDateString()}.` : "Searching for latest photos.",
     });
-  }, [fetchAssets, getAssetWithRetry, preloadNextAsset, toast, setCurrentMediaAndMarkVisited]);
+  }, [fetchAssets, findInitialAssets, getAssetWithRetry, preloadNextAsset, toast, setCurrentMediaAndMarkVisited]);
 
   return {
     currentMedia,
