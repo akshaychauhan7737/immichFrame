@@ -74,7 +74,18 @@ export function useImmich() {
             return null;
         }
 
-        const timeBucket = localStorage.getItem(LOCAL_STORAGE_DATE_KEY) || new Date().toISOString();
+        const getTimeBucket = () => {
+            const savedDate = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
+            if (savedDate) {
+                return savedDate;
+            }
+            // If no date is saved, use the start of the current day (d-1 logic)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Set to midnight
+            return today.toISOString();
+        };
+
+        const timeBucket = getTimeBucket();
 
         try {
             const url = `${API_BASE_URL}/timeline/bucket?timeBucket=${encodeURIComponent(timeBucket)}&visibility=timeline&withPartners=true&withStacked=true&size=${ASSET_FETCH_PAGE_SIZE}`;
