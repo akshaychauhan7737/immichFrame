@@ -1,18 +1,20 @@
+
 export interface ImmichAsset {
   id: string;
-  deviceAssetId: string;
   ownerId: string;
-  deviceId: string;
   type: 'IMAGE' | 'VIDEO';
-  originalPath: string;
-  resizePath: string | null;
-  createdAt: string;
-  modifiedAt: string;
   isFavorite: boolean;
-  mimeType: string | null;
-  duration: string; // e.g., "00:00:09.123456"
-  isArchived: boolean;
+  duration: string;
   fileCreatedAt: string;
+  isTrashed: boolean;
+  livePhotoVideoId: string | null;
+  localOffsetHours: number;
+  projectionType: string | null;
+  ratio: number;
+  status: string;
+  thumbhash: string;
+  stack: any[] | null;
+  visibility: string;
   exifInfo?: {
     make?: string;
     model?: string;
@@ -30,6 +32,26 @@ export interface ImmichAsset {
     country?: string;
     [key: string]: any;
   }
+}
+
+export interface TimelineBucketResponse {
+  city: (string | null)[];
+  country: (string | null)[];
+  duration: (string | null)[];
+  id: string[];
+  isFavorite: boolean[];
+  isImage: boolean[];
+  isTrashed: boolean[];
+  livePhotoVideoId: (string | null)[];
+  localOffsetHours: number[];
+  ownerId: string[];
+  projectionType: (string | null)[];
+  ratio: number[];
+  status: string[];
+  thumbhash: string[];
+  stack: any[]; // Assuming stack can be any type
+  visibility: string[];
+  fileCreatedAt: string[];
 }
 
 export interface MediaAsset {
