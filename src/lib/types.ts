@@ -1,4 +1,5 @@
 
+
 export interface ImmichAsset {
   id: string;
   ownerId: string;
@@ -52,6 +53,12 @@ export interface TimelineBucketResponse {
   stack: any[]; // Assuming stack can be any type
   visibility: string[];
   fileCreatedAt: string[];
+}
+
+export interface TimelineBucket {
+  timeBucket: string;
+  count: number;
+  totalSize: number;
 }
 
 export interface MediaAsset {

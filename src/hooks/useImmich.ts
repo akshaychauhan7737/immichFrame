@@ -2,10 +2,9 @@
 "use client";
 
 import { useCallback, useMemo, useState } from 'react';
-import type { ImmichAsset, MediaAsset, TimelineBucketResponse } from '@/lib/types';
+import type { ImmichAsset, MediaAsset, TimelineBucket, TimelineBucketResponse } from '@/lib/types';
 import { useToast } from './use-toast';
 import { LOCAL_STORAGE_DATE_KEY } from './useSlideshow';
-import { subMonths } from 'date-fns';
 
 // --- Environment-based Configuration ---
 const SERVER_URL = process.env.NEXT_PUBLIC_IMMICH_SERVER_URL;
@@ -86,7 +85,7 @@ export function useImmich() {
         const timeBucket = getTimeBucket();
 
         try {
-            const url = `${API_BASE_URL}/timeline/bucket?timeBucket=${encodeURIComponent(timeBucket)}&visibility=timeline&withPartners=true&withStacked=true&size=${ASSET_FETCH_PAGE_SIZE}`;
+            const url = `${API_BASE_URL}/timeline/bucket?timeBucket=${encodeURIComponent(timeBucket)}&visibility=timeline&withPartners=true&withStacked=true`;
             
             const response = await fetch(url, {
                 method: 'GET',
@@ -117,28 +116,44 @@ export function useImmich() {
         }
     }, [configError]);
 
-    const findInitialAssets = useCallback(async (searchDate = new Date(), attempt = 0): Promise<{ assets: ImmichAsset[], foundDate: Date } | null> => {
-        if (attempt > 36) { // Stop after 3 years
+    const findInitialAssets = useCallback(async (): Promise<{ assets: ImmichAsset[], foundDate: Date } | null> => {
+        if (configError) {
             return null;
         }
+        try {
+            // 1. Fetch all available timeline buckets
+            const bucketsUrl = `${API_BASE_URL}/timeline/buckets?visibility=timeline&withPartners=true&withStacked=true`;
+            const bucketsResponse = await fetch(bucketsUrl, {
+                method: 'GET',
+                headers: { 'x-api-key': API_KEY as string, 'Accept': 'application/json' },
+            });
+            if (!bucketsResponse.ok) {
+                throw new Error(`Failed to fetch timeline buckets: ${bucketsResponse.statusText}`);
+            }
+            const buckets: TimelineBucket[] = await bucketsResponse.json();
 
-        const dateToTry = new Date(searchDate);
-        dateToTry.setDate(1); // Start from the 1st of the month
-        if (attempt > 0) {
-            dateToTry.setMonth(dateToTry.getMonth() - 1);
-        }
+            if (!buckets || buckets.length === 0) {
+                return null; // No buckets found
+            }
 
-        console.log(`Searching for assets in ${dateToTry.toLocaleDateString()}`);
-        const assets = await fetchAssets(dateToTry);
+            // 2. Get the most recent bucket
+            const latestBucket = buckets[0];
+            const dateToTry = new Date(latestBucket.timeBucket);
+            console.log(`Found latest bucket, searching for assets in ${dateToTry.toLocaleDateString()}`);
 
-        if (assets && assets.length > 0) {
-            return { assets, foundDate: dateToTry };
-        } else if (assets) { // API returned success, but no assets. Try previous month.
-            return await findInitialAssets(dateToTry, attempt + 1);
-        } else { // API call failed
+            // 3. Fetch the assets from that bucket
+            const assets = await fetchAssets(dateToTry);
+
+            if (assets && assets.length > 0) {
+                return { assets, foundDate: dateToTry };
+            }
+
+            return null; // No assets found in the latest bucket
+        } catch (e) {
+            console.error("Error finding initial assets:", e);
             return null;
         }
-    }, [fetchAssets]);
+    }, [configError, fetchAssets]);
 
 
     const getAssetUrl = useCallback(async (asset: ImmichAsset, type: 'original' | 'preview'): Promise<string | null> => {
