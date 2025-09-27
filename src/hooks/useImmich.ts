@@ -95,7 +95,8 @@ export function useImmich() {
 
             const savedDate = localStorage.getItem(LOCAL_STORAGE_DATE_KEY);
             if (savedDate) {
-                return savedDate;
+                // The stored key might be just "YYYY-MM-DD", convert to full ISO
+                return new Date(savedDate).toISOString();
             }
             // If no date is saved, get the latest from buckets
             return '';
@@ -103,9 +104,8 @@ export function useImmich() {
 
         const timeBucket = getTimeBucket();
         if (!timeBucket) {
-            // This case should be handled by findInitialAssets, but as a fallback:
-            const initial = await findInitialAssets();
-            return initial?.assets || [];
+             const initial = await findInitialAssets();
+             return initial?.assets || [];
         }
 
 
@@ -147,12 +147,12 @@ export function useImmich() {
         }
         try {
             const buckets = await fetchTimelineBuckets();
-
             if (!buckets || buckets.length === 0) {
                 return null; // No buckets found
             }
 
             const latestBucket = buckets[0];
+            // The timeBucket is a string like "2025-09-01", convert it to a Date object
             const dateToTry = new Date(latestBucket.timeBucket);
             console.log(`Found latest bucket, searching for assets in ${dateToTry.toLocaleDateString()}`);
 
@@ -212,8 +212,6 @@ export function useImmich() {
         let originalUrl: string | null = null;
         let previewUrl: string | null = null;
         
-        // For both IMAGE and VIDEO, the preview-sized thumbnail is sufficient and compatible.
-        // For videos, we still need the separate playback URL.
         previewUrl = await getAssetUrl(asset, 'preview');
 
         if (asset.type === 'IMAGE') {

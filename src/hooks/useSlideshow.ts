@@ -46,9 +46,13 @@ export function useSlideshow(immich: ImmichHook) {
   const setCurrentMediaAndMarkVisited = useCallback((media: MediaAsset | null) => {
     setCurrentMedia(media);
     if (media?.asset) {
-      const bucketDate = new Date(media.asset.fileCreatedAt);
-      bucketDate.setHours(0, 0, 0, 0);
-      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, bucketDate.toISOString());
+        // We store the bucket's date string (e.g., "2025-09-01") directly
+        const bucketDate = new Date(media.asset.fileCreatedAt);
+        const year = bucketDate.getFullYear();
+        const month = (bucketDate.getMonth() + 1).toString().padStart(2, '0');
+        const day = '01'; // Buckets are always by month
+        const bucketIdentifier = `${year}-${month}-${day}`;
+        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, bucketIdentifier);
     }
   }, []);
 
@@ -139,6 +143,7 @@ export function useSlideshow(immich: ImmichHook) {
       let initialResult: { assets: ImmichAsset[], foundDate: Date } | null;
 
       if (savedBucket) {
+        // savedBucket is a string like "2025-09-01", convert to Date
         const assets = await fetchAssets(new Date(savedBucket));
         initialResult = assets ? { assets, foundDate: new Date(savedBucket) } : null;
       } else {
@@ -146,7 +151,7 @@ export function useSlideshow(immich: ImmichHook) {
       }
 
       if (!initialResult || initialResult.assets.length === 0) {
-        setError("No photos found. Check your Immich settings or server connection.");
+        setError("No photos found. Check your Immich server or use settings to select a specific timeline.");
         setIsLoading(false);
         return;
       }
@@ -168,7 +173,7 @@ export function useSlideshow(immich: ImmichHook) {
       }
       
       // Set the date so subsequent fetches continue from here
-      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, initialResult.foundDate.toISOString());
+      localStorage.setItem(LOCAL_STORAGE_DATE_KEY, initialResult.foundDate.toISOString().split('T')[0]);
       setCurrentMediaAndMarkVisited(firstMedia);
       
       const updatedPlaylist = await preloadNextAsset(mutablePlaylist);
@@ -234,7 +239,8 @@ export function useSlideshow(immich: ImmichHook) {
 
   const handleTimelineChange = useCallback(async (date: Date | null) => {
     if (date) {
-        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, date.toISOString());
+        // The date comes from a bucket string like "2025-09-01", so it's already what we need.
+        localStorage.setItem(LOCAL_STORAGE_DATE_KEY, date.toISOString().split('T')[0]);
     } else {
         localStorage.removeItem(LOCAL_STORAGE_DATE_KEY);
     }
@@ -254,6 +260,8 @@ export function useSlideshow(immich: ImmichHook) {
             setCurrentMediaAndMarkVisited(firstMedia);
             const restOfPlaylist = await preloadNextAsset(mutablePlaylist);
             setPlaylist(restOfPlaylist);
+        } else {
+            setError("No photos found for the selected date.");
         }
     } else {
         setError("No photos found for the selected date.");

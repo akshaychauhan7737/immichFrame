@@ -58,7 +58,6 @@ export interface TimelineBucketResponse {
 export interface TimelineBucket {
   timeBucket: string;
   count: number;
-  totalSize: number;
 }
 
 export interface MediaAsset {
